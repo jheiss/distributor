@@ -36,6 +36,12 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 import java.text.ParseException;
 
+/*
+ * To add a new function to Controller, search for comments starting
+ * with ADD to find places that you need to add something for your new
+ * function.
+ */
+
 class Controller implements Runnable
 {
 	Distributor distributor;
@@ -209,6 +215,7 @@ class ControllerConnection implements Runnable
 				command = st.nextToken();
 				logger.finer("Read '" + command + "' command from " + socket);
 
+				// ADD:  Add new function here
 				if (command.equals("stats"))
 				{
 					stats(st);
@@ -216,6 +223,10 @@ class ControllerConnection implements Runnable
 				else if (command.equals("memstats"))
 				{
 					memstats(st);
+				}
+				else if (command.equals("conns"))
+				{
+					connections(st);
 				}
 				else if (command.equals("threads"))
 				{
@@ -277,9 +288,11 @@ class ControllerConnection implements Runnable
 
 	protected void help(StringTokenizer st)
 	{
+		// ADD:  Add new function here
 		out.println("Commands:");
 		out.println("stats");
 		out.println("memstats");
+		out.println("conns");
 		out.println("threads");
 		out.println("add");
 		out.println("remove");
@@ -292,6 +305,12 @@ class ControllerConnection implements Runnable
 		out.println("quit");
 	}
 
+	// ADD: Add a method for your function here
+
+	/*
+	 * Display statistics on the connections that Distributor has
+	 * handled.
+	 */
 	protected void stats(StringTokenizer st)
 	{
 		// Display the statistics for each of the targets
@@ -324,6 +343,11 @@ class ControllerConnection implements Runnable
 		}
 	}
 
+	/*
+	 * Display sizes of all of the long-term data structures used in
+	 * Distributor.  This aids in detecting and fixing any bugs/leaks in
+	 * the handling of those data structures.
+	 */
 	protected void memstats(StringTokenizer st)
 	{
 		Iterator iter;
@@ -380,6 +404,42 @@ class ControllerConnection implements Runnable
 						target = (Target) targetIter.next();
 						out.println("  " + target);
 						out.println(target.getMemoryStats("    "));
+					}
+				}
+			}
+		}
+	}
+
+	/*
+	 * Print all of the connections that Distributor is currently
+	 * handling.
+	 */
+	protected void connections(StringTokenizer st)
+	{
+		List targetGroups = distributor.getTargetGroups();
+		synchronized (targetGroups)
+		{
+			Iterator iter;
+			List targets;
+			Target target;
+			Iterator targetIter;
+
+			int tgCounter = 0;
+			iter = targetGroups.iterator();
+			while (iter.hasNext())
+			{
+				out.println("Target group " + tgCounter + ":");
+				tgCounter++;
+
+				targets = (List) iter.next();
+				synchronized (targets)
+				{
+					targetIter = targets.iterator();
+					while (targetIter.hasNext())
+					{
+						target = (Target) targetIter.next();
+						out.println("  " + target);
+						out.println(target.getConnectionList("    "));
 					}
 				}
 			}
