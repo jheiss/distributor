@@ -43,6 +43,7 @@ import java.util.logging.Logger;
 
 class DataMover implements Runnable
 {
+	Target target;
 	Selector selector;
 	Logger logger;
 	List distributionAlgorithms;
@@ -53,10 +54,11 @@ class DataMover implements Runnable
 	long serverToClientByteCount;
 	Thread thread;
 
-	protected DataMover(Distributor distributor)
+	protected DataMover(Distributor distributor, Target target)
 	{
 		logger = distributor.getLogger();
 		distributionAlgorithms = distributor.getDistributionAlgorithms();
+		this.target = target;
 
 		try
 		{
@@ -77,7 +79,7 @@ class DataMover implements Runnable
 		serverToClientByteCount = 0;
 
 		// Create a thread for ourselves and start it
-		thread = new Thread(this, getClass().getName());
+		thread = new Thread(this, toString());
 		thread.start();
 	}
 
@@ -407,6 +409,26 @@ class DataMover implements Runnable
 	public long getServerToClientByteCount()
 	{
 		return serverToClientByteCount;
+	}
+
+	public String toString()
+	{
+		return getClass().getName() +
+			" for " + target.getInetAddress() + ":" + target.getPort();
+	}
+
+	protected String getMemoryStats(String indent)
+	{
+		String stats;
+
+		stats = indent + clients.size() + " entries in clients Map\n";
+		stats += indent + servers.size() + " entries in servers Map\n";
+		stats += indent +
+			newConnections.size() + " entries in newConnections List\n";
+		stats += indent +
+			selector.keys().size() + " entries in selector key Set";
+
+		return stats;
 	}
 }
 
