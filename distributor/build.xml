@@ -58,7 +58,7 @@
 
 	<target
 		name="dist"
-		depends="compile"
+		depends="jar"
 		description="Builds a distribution tarball">
 		<tar
 			destfile="${build.dist}/Distributor-${version}.tar.gz"
@@ -66,14 +66,22 @@
 			<!-- Include the source -->
 			<tarfileset
 				dir="${src.dir}"
+				excludes="**/old/**"
 				prefix="Distributor-${version}/src"/>
 			<!-- And the compiled class files -->
 			<tarfileset
 				dir="${build.classes}"
 				prefix="Distributor-${version}/build/classes"/>
+			<!-- And the JAR -->
+			<tarfileset
+				dir="${build.lib}"
+				prefix="Distributor-${version}/build/lib"/>
 			<!-- And some other misc. files -->
-			<tarfileset dir="." prefix="Cellar-${version}">
+			<tarfileset dir="." prefix="Distributor-${version}">
 				<include name="build.xml"/>
+				<include name="README"/>
+				<include name="README.distributor.conf"/>
+				<include name="TODO"/>
 				<include name="GPL"/>
 			</tarfileset>
 		</tar>
