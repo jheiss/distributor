@@ -1,6 +1,20 @@
+0.5:  Improved process by which incoming connections are distributed to
+        back-end servers.  Formerly a mostly hard-coded, single-threaded
+        process, it is now fully user configurable and makes use of
+        non-blocking I/O to handle multiple connections at once.  These
+        improvements will also allow more complicated distribution
+        algorithms in the future.  An HTTP cookie algorithm is in
+        development for a future release.
+      Added a failure count for each back-end server; when the number of
+        consecutive failures passes a user-configurable threshold that
+        target is disabled.  This saves future connections from having to
+        time out before moving on to another server.  For those who do not
+        have more complicated server testing needs, I've added a simple TCP
+        connection service test to detect when these servers have recovered
+        so they can be re-enabled as a target.
 0.4:  Cleaner handling of selection keys in DataMover, which
-      fixes a bug that led to a tight loop in some circumstances
-      and spurious warning messages.
+        fixes a bug that led to a tight loop in some circumstances
+        and spurious warning messages.
 0.3:  Added log warning if service test times out
 0.2:  Made control server port a user-configurable item
 0.1:  Initial release
