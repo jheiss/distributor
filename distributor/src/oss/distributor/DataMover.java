@@ -34,6 +34,7 @@ import java.nio.channels.Selector;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.ClosedChannelException;
+import java.nio.channels.CancelledKeyException;
 import java.util.List;
 import java.util.LinkedList;
 import java.util.Map;
@@ -113,13 +114,16 @@ class DataMover implements Runnable
 
 	/*
 	 * Process new connections queued up by calls to addConnection()
+	 *
+	 * Returns true if it did something (i.e. the queue wasn't empty).
 	 */
-	private void processNewConnections()
+	private boolean processNewConnections()
 	{
 		Iterator iter;
 		Connection conn;
 		SocketChannel client;
 		SocketChannel server;
+		boolean didSomething = false;
 
 		synchronized (newConnections)
 		{
@@ -162,8 +166,12 @@ class DataMover implements Runnable
 							ioe.getMessage());
 					}
 				}
+
+				didSomething = true;
 			}
 		}
+
+		return didSomething;
 	}
 
 	/*
@@ -191,12 +199,15 @@ class DataMover implements Runnable
 
 	/*
 	 * Process channels queued up by calls to addToReactivateList()
+	 *
+	 * Returns true if it did something (i.e. the queue wasn't empty).
 	 */
-	private void processReactivateList()
+	private boolean processReactivateList()
 	{
 		Iterator iter;
 		SocketChannel channel;
 		SelectionKey key;
+		boolean didSomething = false;
 
 		synchronized (channelsToReactivate)
 		{
@@ -208,22 +219,38 @@ class DataMover implements Runnable
 
 				key = channel.keyFor(selector);
 
-				// Add OP_READ back to the interest bits
-				key.interestOps(key.interestOps() | SelectionKey.OP_READ);
+				try
+				{
+					// Add OP_READ back to the interest bits
+					key.interestOps(
+						key.interestOps() | SelectionKey.OP_READ);
+				}
+				catch (CancelledKeyException e)
+				{
+					// The channel has been closed or something similar,
+					// nothing we can do about it.
+				}
+
+				didSomething = true;
 			}
 		}
+
+		return didSomething;
 	}
 
 	public void run()
 	{
+		ByteBuffer buffer;
+		boolean pncReturn;
+		boolean prlReturn;
+		int selectFailureOrZeroCount = 0;
+		int selectReturn;
 		Iterator keyIter;
 		SelectionKey key;
 		SocketChannel src;
 		SocketChannel dst;
 		boolean clientToServer;
 		boolean readMore;
-		ByteBuffer buffer;
-		int selectReturn;
 		int numberOfBytes;
 
 		buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
@@ -233,12 +260,31 @@ class DataMover implements Runnable
 			//
 			// Register any new connections with the selector
 			//
-			processNewConnections();
+			pncReturn = processNewConnections();
 
 			//
 			// Re-activate channels with the selector
 			//
-			processReactivateList();
+			prlReturn = processReactivateList();
+
+			// Reset the failure counter if processNewConnections() or
+			// processReactivateList() did something, as that would
+			// explain why select would return with zero ready channels.
+			if (pncReturn || prlReturn)
+			{
+				selectFailureOrZeroCount = 0;
+			}
+
+			// If we exceed the threshold of failed selects, pause
+			// for a bit so we don't go into a tight loop
+			if (selectFailureOrZeroCount >= 10)
+			{
+				logger.warning(
+					"select appears to be failing repeatedly, pausing");
+				try { Thread.sleep(500); }
+					catch (InterruptedException e) {}
+				selectFailureOrZeroCount = 0;
+			}
 
 			//
 			// Now select for any channels that have data to be moved
@@ -247,6 +293,15 @@ class DataMover implements Runnable
 			try
 			{
 				selectReturn = selector.select();
+
+				if (selectReturn > 0)
+				{
+					selectFailureOrZeroCount = 0;
+				}
+				else
+				{
+					selectFailureOrZeroCount++;
+				}
 			}
 			catch (IOException e)
 			{
@@ -256,6 +311,7 @@ class DataMover implements Runnable
 				logger.warning(
 					"Error when selecting for ready channel: " +
 					e.getMessage());
+				selectFailureOrZeroCount++;
 				continue WHILETRUE;
 			}
 
@@ -406,11 +462,20 @@ class DataMover implements Runnable
 			// DelayedMover will re-activate the source channel (via
 			// addToReactivateList()) when it has written all of the
 			// delayed data.
-			sourceKey.interestOps(
-				sourceKey.interestOps() ^ SelectionKey.OP_READ);
+			try
+			{
+				sourceKey.interestOps(
+					sourceKey.interestOps() ^ SelectionKey.OP_READ);
 
-			delayedMover.addToQueue(
-				new DelayedDataInfo(dst, delayedBuffer, src, clientToServer));
+				delayedMover.addToQueue(
+					new DelayedDataInfo(
+						dst, delayedBuffer, src, clientToServer));
+			}
+			catch (CancelledKeyException e)
+			{
+				// The channel has been closed or something similar,
+				// nothing we can do about it.
+			}
 
 			return false;
 		}
@@ -630,12 +695,13 @@ class DataMover implements Runnable
 		/*
 		 * Process the list created by addToQueue()
 		 */
-		private void processQueue()
+		private boolean processQueue()
 		{
 			Iterator iter;
 			DelayedDataInfo info;
 			SocketChannel dst;
 			SelectionKey key;
+			boolean didSomething = false;
 
 			synchronized (queue)
 			{
@@ -678,16 +744,31 @@ class DataMover implements Runnable
 					{
 						// We already have a key registered, make sure
 						// it has the right interest bits.
-						key.interestOps(
-							key.interestOps() | SelectionKey.OP_WRITE);
+						try
+						{
+							key.interestOps(
+								key.interestOps() | SelectionKey.OP_WRITE);
+						}
+						catch (CancelledKeyException e)
+						{
+							// The channel has been closed or something
+							// similar, nothing we can do about it.
+							// DataMover will clean things up.
+						}
 					}
+
+					didSomething = true;
 				}
 			}
+
+			return didSomething;
 		}
 
 		public void run()
 		{
 			int selectReturn;
+			int selectFailureOrZeroCount = 0;
+			boolean pqReturn;
 			Iterator keyIter;
 			SelectionKey key;
 			SocketChannel dst;
@@ -699,12 +780,40 @@ class DataMover implements Runnable
 			WHILETRUE: while (true)
 			{
 				// Register any new connections with the selector
-				processQueue();
+				pqReturn = processQueue();
+
+				// Reset the failure counter if processQueue() did
+				// something, as that would explain why select would
+				// return with zero ready channels.
+				if (pqReturn)
+				{
+					selectFailureOrZeroCount = 0;
+				}
+
+				// If we exceed the threshold of failed selects, pause
+				// for a bit so we don't go into a tight loop
+				if (selectFailureOrZeroCount >= 10)
+				{
+					logger.warning(
+						"select appears to be failing repeatedly, pausing");
+					try { Thread.sleep(500); }
+						catch (InterruptedException e) {}
+					selectFailureOrZeroCount = 0;
+				}
 
 				// Now select for any channels that are ready to write
 				try
 				{
 					selectReturn = delayedSelector.select();
+
+					if (selectReturn > 0)
+					{
+						selectFailureOrZeroCount = 0;
+					}
+					else
+					{
+						selectFailureOrZeroCount++;
+					}
 				}
 				catch (IOException e)
 				{
@@ -714,6 +823,7 @@ class DataMover implements Runnable
 					logger.warning(
 						"Error when selecting for ready channel: " +
 						e.getMessage());
+					selectFailureOrZeroCount++;
 					continue WHILETRUE;
 				}
 
@@ -760,8 +870,17 @@ class DataMover implements Runnable
 							// means we're stuck with the key in our
 							// selector until the connection is closed,
 							// but that seems acceptable.
-							key.interestOps(
-								key.interestOps() ^ SelectionKey.OP_WRITE);
+							try
+							{
+								key.interestOps(
+									key.interestOps() ^ SelectionKey.OP_WRITE);
+							}
+							catch (CancelledKeyException e)
+							{
+								// The channel has been closed or something
+								// similar, nothing we can do about it.
+								// DataMover will clean things up.
+							}
 
 							src = info.getSource();
 							dumpDelayedState(info.getDest());
