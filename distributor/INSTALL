@@ -1,0 +1,24 @@
+Quick guide to installing and running Distributor:
+
+Install
+-------
+
+Presuming you want to install into /usr/local:
+
+- cp distributor.conf /usr/local/etc/distributor.conf
+- cp build/lib/distributor-x.x.jar /usr/local/lib/distributor-x.x.jar
+
+- Edit distributor.conf, read README.distributor.conf for help
+- Get Java 1.4.0 or greater.  Distributor uses many features that were
+  introduced in Java 1.4.  http://java.sun.com/j2se/downloads.html
+  You can just get the JRE if all you want to do is run Distributor.  If
+  you want the compiler, etc. get the SDK.
+
+Run
+---
+
+If you've configured Distributor to listen on a privileged port (<1024)
+then you'll need to run it as root.  Otherwise it can as any user.
+
+java -jar /usr/local/lib/distributor-x.x.jar /usr/local/etc/distributor.conf
+

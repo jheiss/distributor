@@ -1,13 +1,16 @@
-Quick guide to running Distributor:
+Distributor is a software load balancer. Like other load balancers, it
+accepts connections and distributes them to an array of back end
+servers. Some of Distributor's more unique or advanced features:
 
-- Edit distributor.conf, read README.distributor.conf for help
-- Get Java 1.4.0 or greater.  Distributor uses many features that were
-  introduced in Java 1.4.  http://java.sun.com/j2se/downloads.html
-  You can just get the JRE if all you want to do is run Distributor.  If
-  you want the compiler, etc. get the SDK.
-- Run Distributor.  If you've configured Distributor to listen on a
-  privileged port (<1024) then you'll need to run it as root.  Otherwise
-  it can as any user.  To quote the usage message:
+  * Integrated testing of back end servers
+  * Optional termination of client connections to misfunctioning
+    servers
+  * Online control of load balancer configuration
+  * Grouping of servers with rollover from group to group
+  * Two connection distribution methods: round robin and hashed based
+    on client IP address
 
-  Usage:  java Distributor /path/to/distributor.conf
+For more information, see the web site:  http://distributor.sourceforge.net/
+
+See INSTALL for installation instructions.
 
