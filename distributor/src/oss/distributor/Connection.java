@@ -34,7 +34,10 @@ import java.nio.channels.SelectionKey;
 public class Connection
 {
 	SocketChannel client;
+	// The connection to the target server
 	SocketChannel server;
+	// The Target that 'server' is a connection to
+	Target target;
 	// DataMover passes the selection keys for the two channels to us
 	// once it has registered the channels with its Selector.  That way
 	// we can cancel the keys if we are asked to terminate the
@@ -45,10 +48,12 @@ public class Connection
 	SelectionKey serverSelectionKey;
 	boolean terminated;
 
-	public Connection(SocketChannel client, SocketChannel server)
+	public Connection(
+		SocketChannel client, SocketChannel server, Target target)
 	{
 		this.client = client;
 		this.server = server;
+		this.target = target;
 		this.clientSelectionKey = null;
 		this.serverSelectionKey = null;
 
@@ -65,12 +70,17 @@ public class Connection
 		return server;
 	}
 
-	public void setClientSelectionKey(SelectionKey key)
+	public Target getTarget()
+	{
+		return target;
+	}
+
+	protected void setClientSelectionKey(SelectionKey key)
 	{
 		clientSelectionKey = key;
 	}
 
-	public void setServerSelectionKey(SelectionKey key)
+	protected void setServerSelectionKey(SelectionKey key)
 	{
 		serverSelectionKey = key;
 	}
