@@ -1,7 +1,8 @@
 /*****************************************************************************
  * $Id$
  *****************************************************************************
- * Simple load balancer
+ * Software load balancer
+ * http://distributor.sourceforge.net/
  *****************************************************************************
  * Copyright 2003 Jason Heiss
  * 
@@ -29,8 +30,6 @@ import java.io.*;
 import java.net.*;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
-import java.util.Hashtable;
-import java.util.Map;
 import java.util.HashMap;
 import java.util.TreeMap;
 import java.util.List;
@@ -56,7 +55,7 @@ import org.xml.sax.SAXException;
 
 public class Distributor
 {
-	protected static void usage()
+	private static void usage()
 	{
 		System.err.println(
 			"Usage:  java -jar /path/to/distributor-x.x.jar " +
@@ -66,25 +65,34 @@ public class Distributor
 		
 	public static void main(String[] args)
 	{
+		// Perhaps one of the trickier aspects of programming is
+		// Java is how to write a well behaved daemon without being
+		// OS-specific.
+		//
+		// For example, here's the UNIX FAQ entry on writing a daemon:
+		// http://www.erlenstar.demon.co.uk/unix/faq_2.html#SEC16
+		// Nearly all of that is impossible in Java
+		//
+		// We do what we can here and leave the rest up to an init
+		// script (distributor comes with a sample one).
+		try { System.in.close(); } catch (IOException e) {}
+
 		Distributor d = new Distributor(args);
 		d.balance();
 	}
 
 	InetAddress bindAddress;
 	int port;
-	boolean terminate;
+	boolean terminateOnDisable;
 	int connectionTimeout;
-	int balanceAlgorithm;
-	static final int ALGORITHM_ROUNDROBIN = 1;
-	static final int ALGORITHM_HASH = 2;
-	static final int ALGORITHM_LEAST_CONNECTIONS = 3;
-	static final int ALGORITHM_LOWEST_LOAD = 4;
-	Map hashAlgorithmMap;
+	int connectionFailureLimit;
 	List targetGroups;
+	List distributionAlgorithms;
 	Logger logger;
 	Object serviceTest;
 	Controller controller;
-	public Distributor(String args[])
+	TargetSelector targetSelector;
+	private Distributor(String args[])
 	{
 		//
 		// Prepare the Java logging system for use
@@ -118,7 +126,7 @@ public class Distributor
 			System.exit(1);
 		}
 
-		logger = Logger.getLogger("oss.distributor.Distributor");
+		logger = Logger.getLogger(getClass().getName());
 		// Let each handler pick its own level
 		logger.setLevel(Level.ALL);
 
@@ -193,14 +201,14 @@ public class Distributor
 			if (rootElement.getAttribute("bindaddr").equals("") ||
 				rootElement.getAttribute("bindaddr").equals("0.0.0.0"))
 			{
-				logger.info("Using wildcard bind address");
+				logger.config("Using wildcard bind address");
 			}
 			else
 			{
 				bindAddress = InetAddress.getByName(
 					rootElement.getAttribute("bindaddr"));
 			}
-			logger.fine("Bind address:  " + bindAddress);
+			logger.config("Bind address:  " + bindAddress);
 
 			if (rootElement.getAttribute("port").equals(""))
 			{
@@ -210,31 +218,15 @@ public class Distributor
 			else
 			{
 				port = Integer.parseInt(rootElement.getAttribute("port"));
-				logger.fine("Port:  " + port);
+				logger.config("Port:  " + port);
 			}
 
-			balanceAlgorithm = ALGORITHM_ROUNDROBIN;
-			if (rootElement.getAttribute("algorithm").equals("roundrobin"))
-			{
-				balanceAlgorithm = ALGORITHM_ROUNDROBIN;
-			}
-			else if (rootElement.getAttribute("algorithm").equals("hash"))
-			{
-				balanceAlgorithm = ALGORITHM_HASH;
-			}
-			else
-			{
-				logger.warning("Unknown balance algorithm:  " +
-					rootElement.getAttribute("algorithm"));
-			}
-			logger.fine("Balance algorithm:  " + balanceAlgorithm);
-
-			terminate = false;
+			terminateOnDisable = false;
 			if (rootElement.getAttribute("terminate_on_disable").equals("yes"))
 			{
-				terminate = true;
+				terminateOnDisable = true;
 			}
-			logger.fine("Terminate on disable:  " + terminate);
+			logger.config("Terminate on disable:  " + terminateOnDisable);
 
 			connectionTimeout = 2000;
 			if (rootElement.getAttribute("connection_timeout").equals(""))
@@ -247,7 +239,21 @@ public class Distributor
 				connectionTimeout = Integer.parseInt(
 					rootElement.getAttribute("connection_timeout"));
 			}
-			logger.fine("Connection timeout:  " + connectionTimeout);
+			logger.config("Connection timeout:  " + connectionTimeout);
+
+			connectionFailureLimit = 5;
+			if (rootElement.getAttribute("connection_failure_limit").equals(""))
+			{
+				logger.warning(
+					"Connection failure limit not specified, using default");
+			}
+			else
+			{
+				connectionFailureLimit = Integer.parseInt(
+					rootElement.getAttribute("connection_failure_limit"));
+			}
+			logger.config(
+				"Connection failure limit:  " + connectionFailureLimit);
 
 			if (rootElement.getAttribute("control_port").equals(""))
 			{
@@ -260,30 +266,91 @@ public class Distributor
 				controlPort = Integer.parseInt(
 					rootElement.getAttribute("control_port"));
 			}
-			logger.fine("Control port:  " + controlPort);
+			logger.config("Control port:  " + controlPort);
 
 			//
-			// Find the "target_group" nodes in the XML document
+			// Read the distribution algorithm configuration and create
+			// the algorithm objects
+			//
+
+			distributionAlgorithms = new ArrayList();
+
+			// Read in the algorithm name -> class name mappings
+			HashMap algoClasses = new HashMap();
+			for (int i=0 ; i<configChildren.getLength() ; i++)
+			{
+				Node configNode = configChildren.item(i);
+				if (configNode.getNodeName().equals("algo_mapping"))
+				{
+					Element mapElement = (Element) configNode;
+					String algoName = mapElement.getAttribute("name");
+					String algoClass = mapElement.getAttribute("class");
+					algoClasses.put(algoName, algoClass);
+				}
+			}
+
+			// Find the "algorithms" node in the XML document
+			for (int i=0 ; i<configChildren.getLength() ; i++)
+			{
+				Node configNode = configChildren.item(i);
+				if (configNode.getNodeName().equals("algorithms"))
+				{
+					Element algosElement = (Element) configNode;
+
+					NodeList algosChildren = algosElement.getChildNodes();
+					for (int j=0 ; j<algosChildren.getLength() ; j++)
+					{
+						Node algoNode = algosChildren.item(j);
+						if (algoNode.getNodeName().equals("algorithm"))
+						{
+							Element algoElement = (Element) algoNode;
+							String algoName =
+								algoElement.getAttribute("name");
+							Object distAlgo =
+								constructObjectFromName(
+									(String) algoClasses.get(algoName),
+									algoElement);
+							distributionAlgorithms.add(distAlgo);
+						}
+					}
+				}
+			}
+
+			// Log the distribution algorithm configuration
+			if (distributionAlgorithms.size() > 0)
+			{
+				logger.config("Distribution algorithms:");
+				Iterator iter = distributionAlgorithms.iterator();
+				while(iter.hasNext())
+				{
+					logger.config(iter.next().toString());
+				}
+			}
+			else
+			{
+				logger.severe(
+					"At least one distribution algorithm must be specified");
+				System.exit(1);
+			}
+
+			//
+			// Read the target group configuration
 			//
 
 			targetGroups = new ArrayList();
 
-			// Use a TreeMap to temporarily hold the target groups.
-			// Once we've loaded them all from the config file we'll
-			// extract them into targetGroups in sorted order.
-			TreeMap tgTree = new TreeMap();
+			// Find the "target_group" nodes in the XML document
 			for (int i=0 ; i<configChildren.getLength() ; i++)
 			{
 				Node configNode = configChildren.item(i);
 				if (configNode.getNodeName().equals("target_group"))
 				{
 					// targets is a LinkedList in order to make the
-					// round robin re-ordering of the list speedy
+					// re-ordering of the list by the round robin
+					// algorithm speedy
 					List targets = new LinkedList();
 
 					Element tgElement = (Element) configNode;
-					int order =
-						Integer.parseInt(tgElement.getAttribute("order"));
 
 					NodeList tgChildren = tgElement.getChildNodes();
 					for (int j=0 ; j<tgChildren.getLength() ; j++)
@@ -299,38 +366,33 @@ public class Distributor
 										targetElement.getAttribute("hostname")),
 									Integer.parseInt(
 										targetElement.getAttribute("port")),
-									terminate));
+									connectionFailureLimit,
+									terminateOnDisable));
 						}
 					}
 
 					if (targets.size() > 0)
 					{
-						tgTree.put(new Integer(order), targets);
+						targetGroups.add(targets);
 					}
 				}
 			}
 
-			// Extract target lists into targetGroups
-			Iterator tgTreeIter = tgTree.values().iterator();
-			while (tgTreeIter.hasNext())
-			{
-				targetGroups.add(tgTreeIter.next());
-			}
-
+			// Log the target group configuration
 			if (targetGroups.size() > 0)
 			{
-				logger.fine("Target groups:  ");
+				logger.config("Target groups:");
 				Iterator tgIter = targetGroups.iterator();
 				int tgCounter = 0;
 				while (tgIter.hasNext())
 				{
-					logger.fine("Group " + tgCounter + ":");
+					logger.config("Group " + tgCounter + ":");
 					tgCounter++;
 					List targets = (List) tgIter.next();
 					Iterator targetIter = targets.iterator();
 					while (targetIter.hasNext())
 					{
-						logger.fine("  " + targetIter.next());
+						logger.config("  " + targetIter.next());
 					}
 				}
 			}
@@ -341,19 +403,21 @@ public class Distributor
 			}
 
 			//
-			// Create the service test
+			// Read the service test configuration and create the
+			// service test object
 			//
+
 			serviceTest = null;
 			// First get the service type
 			String serviceType = rootElement.getAttribute("service_type");
-			logger.fine("Service type:  " + serviceType);
+			logger.config("Service type:  " + serviceType);
 			if (serviceType.equals(""))
 			{
 				logger.warning("No service test specified, none will be used");
 			}
 			else if (serviceType.equals("none"))
 			{
-				logger.fine("Configured for no service test");
+				logger.config("Configured for no service test");
 			}
 			else
 			{
@@ -371,8 +435,6 @@ public class Distributor
 							equals(serviceType))
 						{
 							testParameters = elem;
-							logger.fine(
-								"Found test parameters element in config file");
 						}
 					}
 					else if (node.getNodeName().equals("type_mapping"))
@@ -382,7 +444,7 @@ public class Distributor
 							equals(serviceType))
 						{
 							testClassName = elem.getAttribute("class");
-							logger.fine("Service test class:  " +
+							logger.config("Service test class:  " +
 								testClassName);
 						}
 					}
@@ -400,52 +462,8 @@ public class Distributor
 				}
 
 				// Now construct the service test object
-				try
-				{
-					Class testClass = Class.forName(testClassName);
-					Class[] constructorArgumentClasses = {
-						this.getClass(),
-						Class.forName("org.w3c.dom.Element") };
-					Constructor testClassConstructor =
-						testClass.getConstructor(constructorArgumentClasses);
-					Object[] constructorArguments = {
-						this,
-						testParameters };
-					serviceTest = testClassConstructor.newInstance(
-						constructorArguments);
-				}
-				catch (ClassNotFoundException e)
-				{
-					logger.severe("Service test class not found:  " +
-						e.getMessage());
-					System.exit(1);
-				}
-				catch (NoSuchMethodException e)
-				{
-					logger.severe(
-						"Constructor in service test class not found:  " +
-						e.getMessage());
-					System.exit(1);
-				}
-				catch (InstantiationException e)
-				{
-					logger.severe("Service test class is abstract:  " +
-						e.getMessage());
-					System.exit(1);
-				}
-				catch (IllegalAccessException e)
-				{
-					logger.severe("Access to service test class " +
-						"constructor prohibited:  " +
-						e.getMessage());
-					System.exit(1);
-				}
-				catch (InvocationTargetException e)
-				{
-					logger.severe("Service test class constructor " +
-						"threw exception:  " + e.getMessage());
-					System.exit(1);
-				}
+				serviceTest = constructObjectFromName(
+					testClassName, testParameters);
 			}
 		}
 		catch (ParserConfigurationException e)
@@ -469,36 +487,114 @@ public class Distributor
 			System.exit(1);
 		}
 
-		// *** We need a thread to clean this up over time,
-		// otherwise it will potentially grow quite large
-		hashAlgorithmMap = new HashMap();
-
 		if (controlPort != 0)
 		{
 			controller = new Controller(this, controlPort);
 		}
+
+		targetSelector = new TargetSelector(this);
+
+		// Start all of the threads which require delayed initialization
+		targetSelector.startThread();
+		Iterator iter = distributionAlgorithms.iterator();
+		while(iter.hasNext())
+		{
+			DistributionAlgorithm algo = (DistributionAlgorithm) iter.next();
+			algo.startThread();
+		}
 	}
 
-	protected Logger getLogger()
+	private Object constructObjectFromName(
+		String className, Element configElement)
+	{
+		Object obj;
+		try
+		{
+			Class objClass = Class.forName(className);
+			Class[] constructorArgumentClasses = {
+				this.getClass(),
+				Class.forName("org.w3c.dom.Element") };
+			Constructor classConstructor =
+				objClass.getConstructor(constructorArgumentClasses);
+			Object[] constructorArguments = {
+				this,
+				configElement };
+			obj = classConstructor.newInstance(constructorArguments);
+			return obj;
+		}
+		catch (ClassNotFoundException e)
+		{
+			logger.severe("Class not found:  " + e.getMessage());
+			System.exit(1);
+		}
+		catch (NoSuchMethodException e)
+		{
+			logger.severe(
+				"Constructor in class not found:  " + e.getMessage());
+			System.exit(1);
+		}
+		catch (InstantiationException e)
+		{
+			logger.severe("Class is abstract:  " + e.getMessage());
+			System.exit(1);
+		}
+		catch (IllegalAccessException e)
+		{
+			logger.severe(
+				"Access to class constructor prohibited:  " +
+				e.getMessage());
+			System.exit(1);
+		}
+		catch (InvocationTargetException e)
+		{
+			logger.severe(
+				"Class constructor threw exception:  " + e.getMessage());
+			System.exit(1);
+		}
+
+		return null;
+	}
+
+	public Logger getLogger()
 	{
 		return logger;
 	}
 
-	protected List getTargetGroups()
+	public List getDistributionAlgorithms()
+	{
+		return distributionAlgorithms;
+	}
+
+	public List getTargetGroups()
 	{
 		return targetGroups;
 	}
 
-	protected boolean getTerminate()
+	public TargetSelector getTargetSelector()
 	{
-		return terminate;
+		return targetSelector;
+	}
+
+	public int getConnectionTimeout()
+	{
+		return connectionTimeout;
+	}
+
+	public int getConnectionFailureLimit()
+	{
+		return connectionFailureLimit;
+	}
+
+	public boolean getTerminate()
+	{
+		return terminateOnDisable;
 	}
 
 	/*
 	 * Returns a list of all of the Targets.  Useful for those who don't
 	 * care about the target groups.
 	 */
-	protected List getTargets()
+	public List getTargets()
 	{
 		List all = new ArrayList();
 
@@ -513,10 +609,8 @@ public class Distributor
 		return all;
 	}
 
-	public void balance()
+	private void balance()
 	{
-		TargetSelector targetSelector = new TargetSelector(targetGroups);
-
 		// Open the listening socket and wait for connections
 		try
 		{
@@ -527,204 +621,18 @@ public class Distributor
 			{
 				SocketChannel client = server.accept();
 
-				// *** This should get handed to a thread so that
-				// we don't hold up additional incoming
-				// connections while selecting a target
-				//selectTarget(targetGroups, client);
+				logger.fine("Accepted connection from " + client);
+
 				// Hand the client off to another thread which will
 				// select a target for them.  This frees us up to go
 				// back to listening for new connections.
-				// *** There should actually be a pool of threads so
-				// that a down target doesn't hold everyone up
-				targetSelector.addClient(client);
+				targetSelector.addNewClient(client);
 			}
 		}
 		catch (IOException e)
 		{
 			logger.severe("Error with server socket: " + e.getMessage());
 			System.exit(1);
-		}
-	}
-
-	class TargetSelector implements Runnable
-	{
-		List targetGroups;
-		List queue;
-		Thread thread;
-
-		public TargetSelector(List targetGroups)
-		{
-			this.targetGroups = targetGroups;
-
-			queue = new LinkedList();
-
-			thread = new Thread(this);
-			thread.start();
-		}
-
-		public void addClient(SocketChannel client)
-		{
-			synchronized (queue)
-			{
-				queue.add(client);
-			}
-			synchronized (this)
-			{
-				notifyAll();
-			}
-		}
-
-		public void run()
-		{
-			Iterator i;
-			SocketChannel client;
-
-			while (true)
-			{
-				try
-				{
-					synchronized (this)
-					{
-						// This should go to an infinite wait once I'm
-						// certain that I'm not an idiot and there
-						// aren't any possible deadlocks here.  Until
-						// then I'll play it safe and only wait 1 second.
-						wait(1000);
-					}
-				}
-				catch (InterruptedException e) {}
-
-				synchronized (queue)
-				{
-					i = queue.iterator();
-					while (i.hasNext())
-					{
-						client = (SocketChannel) i.next();
-						i.remove();
-						selectTarget(targetGroups, client);
-					}
-				}
-			}
-		}
-	}
-
-	protected void selectTarget(List targetGroups, SocketChannel client)
-	{
-		if (balanceAlgorithm == ALGORITHM_HASH)
-		{
-			logger.fine("Trying hash algorithm");
-
-			// See if we have an existing mapping for this
-			// client.  If so, and if that target is enabled,
-			// try to send the client to it.
-			Target target = (Target) hashAlgorithmMap.get(
-				client.socket().getInetAddress());
-			if (target != null)
-			{
-				logger.finer("  Existing mapping for " + client +
-					" to " + target + ", trying that first");
-				if (target.isEnabled() && tryTarget(target, client))
-				{
-					return;
-				}
-			}
-
-			// No mapping found for this client, we just fall
-			// through to the round robin algorithm
-		}
-
-		//
-		// Round robin algorithm
-		//
-		logger.fine("Trying round robin algorithm");
-
-		// Make sure nobody modifies targetGroups while we're iterating it
-		synchronized (targetGroups)
-		{
-			List targets;
-			Target target;
-			int tgCounter = 0;
-
-			// Iterate over the target groups
-			Iterator tgIter = targetGroups.iterator();
-			while (tgIter.hasNext())
-			{
-				logger.finer("Trying target group " + tgCounter);
-				tgCounter++;
-
-				targets = (List) tgIter.next();
-
-				// Iterate over the targets in this target group
-				for (int i=0 ; i<targets.size() ; i++)
-				{
-					// Make sure the following two operations are
-					// sequential, just to be safe.
-					synchronized (targets)
-					{
-						// Take the first target off the list
-						target = (Target) targets.remove(0);
-
-						// Put the target back on the list at the end so that
-						// we cycle through all of the targets over time, thus
-						// the round robin.
-						targets.add(target);
-					}
-
-					if (tryTarget(target, client))
-					{
-						if (balanceAlgorithm == ALGORITHM_HASH)
-						{
-							// Store a mapping for this client
-							// so that future connections from
-							// them can get sent to the same
-							// target.
-							hashAlgorithmMap.put(
-								client.socket().getInetAddress(), target);
-						}
-
-						return;
-					}
-				}
-			}
-		}
-
-		// If we get here, it means that we were unable to find a
-		// working target for the client.  Disconnect them.
-		logger.warning("Unable to find a working target for client");
-		try { client.close(); } catch (IOException e) {}
-	}
-
-	protected boolean tryTarget(Target target, SocketChannel client)
-	{
-		logger.finer("  Trying " + target);
-
-		try
-		{
-			synchronized (target)
-			{
-				if (target.isEnabled())
-				{
-					SocketChannel server = SocketChannel.open();
-					server.socket().connect(
-						new InetSocketAddress(
-							target.getInetAddress(),
-							target.getPort()),
-						connectionTimeout);
-					Connection conn = new Connection(client, server);
-					target.addConnection(conn);
-					logger.finer("  Connection to " + target + " successful");
-					return true;
-				}
-				else
-				{
-					return false;
-				}
-			}
-		}
-		catch (IOException e)
-		{
-			logger.warning("Error connecting to target: " + e.getMessage());
-			return false;
 		}
 	}
 
