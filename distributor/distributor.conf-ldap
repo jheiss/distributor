@@ -2,6 +2,7 @@
 
 <distributor
 	port="389"
+	half_close="no"
 	connection_timeout="2000"
 	connection_failure_limit="5"
 	control_port="3456"
