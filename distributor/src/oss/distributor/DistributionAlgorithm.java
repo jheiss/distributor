@@ -35,7 +35,7 @@ import java.util.Set;
 import java.util.Iterator;
 import java.util.logging.Logger;
 import java.io.IOException;
-import java.nio.Buffer;
+import java.nio.ByteBuffer;
 import java.nio.channels.Selector;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
@@ -56,6 +56,13 @@ public abstract class DistributionAlgorithm
 	{
 		this.distributor = distributor;
 
+		// We can safely do this now instead of waiting for
+		// finishInitialization() because we know it's one of the first
+		// things Distributor does.  Some of our child constructors may
+		// want to log things so we don't want to wait.
+		logger = distributor.getLogger();
+		//logger = Logger.getLogger(getClass().getName());
+
 		connections = new HashMap();
 		connectStartTime = new HashMap();
 		failedConnections = new LinkedList();
@@ -75,8 +82,6 @@ public abstract class DistributionAlgorithm
 
 	public void finishInitialization()
 	{
-		logger = distributor.getLogger();
-		//logger = Logger.getLogger(getClass().getName());
 		connectionTimeout = distributor.getConnectionTimeout();
 		targetSelector = distributor.getTargetSelector();
 	}
@@ -315,11 +320,13 @@ public abstract class DistributionAlgorithm
 	 * Provide default no-op implementations for these methods since
 	 * most algorithms won't need to do anything with the data
 	 */
-	public Buffer reviewClientToServerData(Buffer buffer)
+	public ByteBuffer reviewClientToServerData(
+		SocketChannel client, SocketChannel server, ByteBuffer buffer)
 	{
 		return buffer;
 	}
-	public Buffer reviewServerToClientData(Buffer buffer)
+	public ByteBuffer reviewServerToClientData(
+		SocketChannel server, SocketChannel client, ByteBuffer buffer)
 	{
 		return buffer;
 	}
