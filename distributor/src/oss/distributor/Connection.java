@@ -29,17 +29,28 @@ package oss.distributor;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
+import java.nio.channels.SelectionKey;
 
 public class Connection
 {
 	SocketChannel client;
 	SocketChannel server;
+	// DataMover passes the selection keys for the two channels to us
+	// once it has registered the channels with its Selector.  That way
+	// we can cancel the keys if we are asked to terminate the
+	// connection.  Otherwise the keys get activated and DataMover has
+	// to deal with an IOException in order to realize that the
+	// connection has been closed, which is messy.
+	SelectionKey clientSelectionKey;
+	SelectionKey serverSelectionKey;
 	boolean terminated;
 
 	public Connection(SocketChannel client, SocketChannel server)
 	{
 		this.client = client;
 		this.server = server;
+		this.clientSelectionKey = null;
+		this.serverSelectionKey = null;
 
 		terminated = false;
 	}
@@ -54,6 +65,16 @@ public class Connection
 		return server;
 	}
 
+	public void setClientSelectionKey(SelectionKey key)
+	{
+		clientSelectionKey = key;
+	}
+
+	public void setServerSelectionKey(SelectionKey key)
+	{
+		serverSelectionKey = key;
+	}
+
 	public void terminate()
 	{
 		try
@@ -62,6 +83,15 @@ public class Connection
 			server.close();
 		}
 		catch (IOException e) {}
+
+		if (clientSelectionKey != null)
+		{
+			clientSelectionKey.cancel();
+		}
+		if (serverSelectionKey != null)
+		{
+			serverSelectionKey.cancel();
+		}
 
 		terminated = true;
 	}

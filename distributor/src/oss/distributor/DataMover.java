@@ -84,10 +84,14 @@ public class DataMover implements Runnable
 				// registering the channels
 				selector.wakeup();
 
+				SelectionKey key;
+
 				logger.finest("Registering channels with selector");
-				client.register(selector, SelectionKey.OP_READ, server);
+				key = client.register(selector, SelectionKey.OP_READ, server);
+				conn.setClientSelectionKey(key);
 				logger.finest("Client registered");
-				server.register(selector, SelectionKey.OP_READ, client);
+				key = server.register(selector, SelectionKey.OP_READ, client);
+				conn.setServerSelectionKey(key);
 				logger.finest("Server registered");
 			}
 		}
