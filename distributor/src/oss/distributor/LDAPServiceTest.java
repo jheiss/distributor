@@ -53,7 +53,6 @@ public class LDAPServiceTest implements Runnable
 	int timeout;  // How long do we wait for the test to complete before
 	              // deciding that it has failed?
 
-	//Attributes searchAttrs;
 	String searchDN;
 
 	Map requiredAttributes;
