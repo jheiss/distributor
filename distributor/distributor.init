@@ -4,7 +4,7 @@
 cd /
 
 JAVA="/usr/java/j2sdk1.4.1_02/bin/java"
-VER="0.5"
+VER="0.5.5"
 DISTRIBUTOR="$JAVA -jar /usr/local/lib/distributor-$VER.jar"
 
 case "$1" in
