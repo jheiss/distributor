@@ -41,7 +41,7 @@ public abstract class BackgroundTest implements Runnable
 	{
 		this.target = target;
 
-		thread = new Thread(this);
+		thread = new Thread(this, getClass().getName());
 	}
 
 	public void startTest()
@@ -58,10 +58,10 @@ public abstract class BackgroundTest implements Runnable
 	 * The test method should set finished to true when complete and
 	 * success to true if the test succeeded.
 	 *
-	 * It should also call this.notifyAll() when finished to allow
+	 * It should also call this.notify() when finished to allow
 	 * the caller to wait() on this object.
 	 */
-	abstract void test();
+	public abstract void test();
 
 	public static final int RESULT_NOTFINISHED = 1;
 	public static final int RESULT_SUCCESS = 2;
