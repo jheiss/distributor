@@ -27,6 +27,7 @@
 package oss.distributor;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -37,8 +38,9 @@ import org.w3c.dom.Element;
 class RoundRobinDistributionAlgorithm
 	extends DistributionAlgorithm implements Runnable
 {
-	Map currentTargetGroups;
-	Map currentTargets;
+	Map clientStates;
+	List nextTargetIndicies;
+	List targetGroups;
 	Thread thread;
 
 	/*
@@ -50,10 +52,16 @@ class RoundRobinDistributionAlgorithm
 	{
 		super(distributor);
 
-		currentTargetGroups = new HashMap();
-		currentTargets = new HashMap();
+		clientStates = new HashMap();
+		nextTargetIndicies = new ArrayList();
 
 		thread = new Thread(this, getClass().getName());
+	}
+
+	public void finishInitialization()
+	{
+		super.finishInitialization();
+		targetGroups = distributor.getTargetGroups();
 	}
 
 	public void startThread()
@@ -63,13 +71,9 @@ class RoundRobinDistributionAlgorithm
 
 	public void tryToConnect(SocketChannel client)
 	{
-		synchronized(currentTargetGroups)
+		synchronized(clientStates)
 		{
-			currentTargetGroups.put(client, new Integer(0));
-		}
-		synchronized(currentTargets)
-		{
-			currentTargets.put(client, new Integer(0));
+			clientStates.put(client, new ClientState());
 		}
 
 		tryNextTarget(client);
@@ -77,116 +81,38 @@ class RoundRobinDistributionAlgorithm
 
 	private void tryNextTarget(SocketChannel client)
 	{
-		List targetGroups = distributor.getTargetGroups();
-		int currentTargetGroupNumber;
-		List currentTargetGroup;
-		int currentTargetNumber;
-		Target currentTarget;
+		ClientState clientState;
+		Target target;
 
-		// Check to see if we're out of available targets for this
-		// client.
-		// (Flagged by the previous invocation of this method by
-		// removing us from the Maps.)
-		synchronized(currentTargetGroups)
+		synchronized(clientStates)
 		{
-			if (currentTargetGroups.get(client) == null)
-			{
-				// Give the client back to TargetSelector so it can try
-				// another distribution algorithm
-				logger.fine("Tried all targets for " + client +
-					" without success");
-				targetSelector.addUnconnectedClient(client);
-				return;
-			}
+			clientState = (ClientState) clientStates.get(client);
 		}
 
-		synchronized(currentTargetGroups)
+		try
 		{
-			currentTargetGroupNumber =
-				((Integer) currentTargetGroups.get(client)).intValue();
+			target = clientState.getNextTarget();
 		}
-		synchronized(targetGroups)
+		catch (NoMoreTargetsException e)
 		{
-			currentTargetGroup =
-				(List) targetGroups.get(currentTargetGroupNumber);
-		}
-		synchronized(currentTargets)
-		{
-			currentTargetNumber =
-				((Integer) currentTargets.get(client)).intValue();
-		}
-		synchronized(currentTargetGroup)
-		{
-			currentTarget =
-				(Target) currentTargetGroup.get(currentTargetNumber);
+			// Give the client back to TargetSelector so it can try
+			// another distribution algorithm
+			logger.fine("Tried all targets for " + client +
+				" without success");
+			synchronized(clientStates)
+			{
+				clientStates.remove(client);
+			}
+			targetSelector.addUnconnectedClient(client);
+			return;
 		}
 
-		// If we're trying the first target in the group, cycle the
-		// group to create the round-robin action.
-		if (currentTargetNumber == 0)
-		{
-			logger.finest("Rotating target group");
-			synchronized (currentTargetGroup)
-			{
-				// Take the first target off the list
-				Target target = (Target) currentTargetGroup.remove(0);
-
-				// Put the target back on the list at the end so
-				// that we cycle through all of the targets over
-				// time, thus the round robin.
-				currentTargetGroup.add(target);
-			}
-		}
-
-		// Now increment the current target group/target counters so
-		// we're ready for the next time if this connection fails
-		//
-		// If there are still targets in this target group, just
-		// increment the current target number counter.
-		if (currentTargetNumber < currentTargetGroup.size() - 1)
-		{
-			synchronized(currentTarget)
-			{
-				currentTargets.put(
-					client,
-					new Integer(currentTargetNumber + 1));
-			}
-		}
-		// Else if there are more target groups available, increment the
-		// target group counter and reset the target counter to zero.
-		else if (currentTargetGroupNumber < targetGroups.size() - 1)
-		{
-			synchronized(currentTargetGroups)
-			{
-				currentTargetGroups.put(
-					client,
-					new Integer(currentTargetGroupNumber + 1));
-			}
-			synchronized(currentTargets)
-			{
-				currentTargets.put(client, new Integer(0));
-			}
-		}
-		// Else we've run out of targets and target groups, drop this
-		// client from the maps.
-		else
-		{
-			synchronized(currentTargetGroups)
-			{
-				currentTargetGroups.remove(client);
-			}
-			synchronized(currentTargets)
-			{
-				currentTargets.remove(client);
-			}
-		}
-
-		if (currentTarget.isEnabled())
+		if (target.isEnabled())
 		{
 			logger.finer(
 				"Initiating connection from " + client +
-				" to " + currentTarget);
-			initiateConnection(client, currentTarget);
+				" to " + target);
+			initiateConnection(client, target);
 		}
 		else
 		{
@@ -214,13 +140,9 @@ class RoundRobinDistributionAlgorithm
 			while(iter.hasNext())
 			{
 				conn = (Connection) iter.next();
-				synchronized(currentTargetGroups)
+				synchronized(clientStates)
 				{
-					currentTargetGroups.remove(conn.getClient());
-				}
-				synchronized(currentTargets)
-				{
-					currentTargets.remove(conn.getClient());
+					clientStates.remove(conn.getClient());
 				}
 
 				targetSelector.addFinishedClient(conn);
@@ -233,6 +155,220 @@ class RoundRobinDistributionAlgorithm
 				client = (SocketChannel) iter.next();
 				tryNextTarget(client);
 			}
+		}
+	}
+
+	class NoMoreTargetsException extends Exception
+	{
+	}
+
+	class NoSuchTargetGroupException extends Exception
+	{
+	}
+
+	/*
+	 * For the given target group, return the index of the target within
+	 * the group that should be the starting point for the next client
+	 * which wants to use that target group.  Then increments that index
+	 * so the next client gets told to start at the next target.  This
+	 * leads to the "round robin" action this algorithm is supposed to
+	 * provide.
+	 *
+	 * Throws a NoSuchTargetGroupException if the given target group
+	 * doesn't exist.
+	 */
+	private int getNextTargetIndex(int targetGroupIndex)
+		throws NoSuchTargetGroupException
+	{
+		Integer indexInteger;
+		int index;
+
+		synchronized(nextTargetIndicies)
+		{
+			// Pull the current index out of the nextTargetIndicies List,
+			// starting at zero if there isn't currently an entry
+			try
+			{
+				indexInteger =
+					(Integer) nextTargetIndicies.get(targetGroupIndex);
+			}
+			catch (IndexOutOfBoundsException e)
+			{
+				indexInteger = new Integer(0);
+			}
+			index = indexInteger.intValue();
+
+			// Increment the counter, wrapping back to zero if
+			// necessary, and stick it back in the List.
+			List targetGroup;
+			int nextIndex;
+			synchronized(targetGroups)
+			{
+				try
+				{
+					targetGroup = (List) targetGroups.get(targetGroupIndex);
+				}
+				catch (IndexOutOfBoundsException e)
+				{
+					// This target group doesn't exist anymore (admins
+					// can add/remove targets and target groups while
+					// Distributor is running via the Controller).
+					throw new NoSuchTargetGroupException();
+				}
+			}
+			synchronized(targetGroup)
+			{
+				if (index < targetGroup.size() - 1)
+				{
+					nextIndex = index + 1;
+				}
+				else
+				{
+					nextIndex = 0;
+				}
+			}
+			nextTargetIndicies.add(targetGroupIndex, new Integer(nextIndex));
+		}
+
+		return index;
+	}
+
+	/*
+	 * Stores the state necessary to keep track of which targets
+	 * a particular client has tried or should try next while iterating
+	 * through all of the targets in a round-robin fashion.
+	 *
+	 * We need to keep track of the next target (i.e. the next one
+	 * that should be tried) and the last one that should be tried.
+	 *
+	 * For example, imagine a target group with 4 targets:  0, 1, 2, 3
+	 * Based on a call to getNextTargetIndex(), we're told to start at 2.
+	 * So initially the next target will be 2.  The last target will
+	 * be 1.  We'll try target 2, followed by 3, then 0, then 1.  If
+	 * none of those succeed, we'll move on to the next target group.
+	 */
+	class ClientState
+	{
+		int currentTargetGroupIndex;
+		int nextTargetIndex;
+		int lastTargetIndex;
+
+		ClientState()
+		{
+			currentTargetGroupIndex = 0;
+
+			try
+			{
+				nextTargetIndex = getNextTargetIndex(currentTargetGroupIndex);
+				if (nextTargetIndex > 0)
+				{
+					lastTargetIndex = nextTargetIndex - 1;
+				}
+				else
+				{
+					List currentTargetGroup;
+
+					synchronized(targetGroups)
+					{
+						currentTargetGroup =
+							(List) targetGroups.get(currentTargetGroupIndex);
+					}
+
+					lastTargetIndex = currentTargetGroup.size() - 1;
+				}
+			}
+			catch (NoSuchTargetGroupException e)
+			{
+				nextTargetIndex = 0;
+				lastTargetIndex = 0;
+			}
+		}
+
+		/*
+		 * Return the next target that should be tried for this client.
+		 */
+		Target getNextTarget() throws NoMoreTargetsException
+		{
+			List currentTargetGroup;
+			Target nextTarget;
+
+			synchronized(targetGroups)
+			{
+				try
+				{
+					currentTargetGroup =
+						(List) targetGroups.get(currentTargetGroupIndex);
+				}
+				catch (IndexOutOfBoundsException e)
+				{
+					// Either we've checked all of the target groups or
+					// someone removed some target groups via the
+					// Controller.  Either way, there are no more
+					// targets available for this client.
+					throw new NoMoreTargetsException();
+				}
+			}
+			synchronized(currentTargetGroup)
+			{
+				// Double-check that the size of the target group hasn't
+				// changed, and do something appropriate if it has.
+				if (nextTargetIndex > currentTargetGroup.size() - 1)
+				{
+					nextTargetIndex = 0;
+				}
+				if (lastTargetIndex > currentTargetGroup.size() - 1)
+				{
+					lastTargetIndex = currentTargetGroup.size() - 1;
+				}
+
+				nextTarget =
+					(Target) currentTargetGroup.get(nextTargetIndex);
+			}
+
+			// Now increment nextTargetIndex, and
+			// currentTargetGroupIndex if necessary
+			if (nextTargetIndex == lastTargetIndex)
+			{
+				currentTargetGroupIndex++;
+				try
+				{
+					nextTargetIndex =
+						getNextTargetIndex(currentTargetGroupIndex);
+					if (nextTargetIndex > 0)
+					{
+						lastTargetIndex = nextTargetIndex - 1;
+					}
+					else
+					{
+						List nextTargetGroup;
+						synchronized (targetGroups)
+						{
+							nextTargetGroup =
+								(List) targetGroups.get(
+									currentTargetGroupIndex);
+						}
+						lastTargetIndex = nextTargetGroup.size() - 1;
+					}
+				}
+				catch (NoSuchTargetGroupException e)
+				{
+					nextTargetIndex = 0;
+					lastTargetIndex = 0;
+				}
+			}
+			else
+			{
+				if (nextTargetIndex >= currentTargetGroup.size() - 1)
+				{
+					nextTargetIndex = 0;
+				}
+				else
+				{
+					nextTargetIndex++;
+				}
+			}
+
+			return nextTarget;
 		}
 	}
 }
