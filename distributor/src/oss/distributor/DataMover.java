@@ -44,6 +44,7 @@ import java.util.logging.Logger;
 class DataMover implements Runnable
 {
 	Target target;
+	boolean halfClose;
 	Selector selector;
 	Logger logger;
 	List distributionAlgorithms;
@@ -54,15 +55,16 @@ class DataMover implements Runnable
 	long serverToClientByteCount;
 	Thread thread;
 
-	protected DataMover(Distributor distributor, Target target)
+	protected DataMover(
+		Distributor distributor, Target target, boolean halfClose)
 	{
 		logger = distributor.getLogger();
 		distributionAlgorithms = distributor.getDistributionAlgorithms();
 		this.target = target;
+		this.halfClose = halfClose;
 
 		try
 		{
-			//logger.finer("Opening selector");
 			selector = Selector.open();
 		}
 		catch (IOException e)
@@ -167,14 +169,10 @@ class DataMover implements Runnable
 		SocketChannel src;
 		SocketChannel dst;
 		boolean clientToServer;
-		Socket srcSocket;
-		Socket dstSocket;
 		boolean readMore;
-		Iterator algoIter;
-		DistributionAlgorithm algo;
 		ByteBuffer buffer;
-		ByteBuffer reviewedBuffer;
-		int r;
+		int selectReturn;
+		int numberOfBytes;
 
 		final int bufferSize = 128 * 1024;
 		buffer = ByteBuffer.allocateDirect(bufferSize);
@@ -189,11 +187,10 @@ class DataMover implements Runnable
 			//
 			// Now select for any channels that have data to be moved
 			//
-			r = 0;
+			selectReturn = 0;
 			try
 			{
-				//logger.finest("Calling select");
-				r = selector.select();
+				selectReturn = selector.select();
 			}
 			catch (IOException e)
 			{
@@ -207,7 +204,7 @@ class DataMover implements Runnable
 			}
 
 			logger.finest(
-				"select reports " + r + " channels ready to read");
+				"select reports " + selectReturn + " channels ready to read");
 
 			// Work through the list of channels that have data to read
 			keyIter = selector.selectedKeys().iterator();
@@ -250,154 +247,200 @@ class DataMover implements Runnable
 
 						// Try to read data
 						buffer.clear();
-						r = src.read(buffer);
-						logger.finest("Read " + r + " bytes from " + src);
-						if (r > 0)  // Data was read
+						numberOfBytes = src.read(buffer);
+						logger.finest(
+							"Read " + numberOfBytes + " bytes from " + src);
+
+						if (numberOfBytes > 0)  // Data was read
 						{
 							readMore = true;
-
-							if (clientToServer)
-							{
-								clientToServerByteCount += r;
-							}
-							else
-							{
-								serverToClientByteCount += r;
-							}
-
-							buffer.flip();
-
-							// Give each of the distribution algorithms a
-							// chance to inspect/modify the data stream
-							algoIter = distributionAlgorithms.iterator();
-							reviewedBuffer = buffer;
-							while (algoIter.hasNext())
-							{
-								algo =
-									(DistributionAlgorithm) algoIter.next();
-								if (clientToServer)
-								{
-									reviewedBuffer =
-										algo.reviewClientToServerData(
-											src, dst, reviewedBuffer);
-								}
-								else
-								{
-									reviewedBuffer =
-										algo.reviewServerToClientData(
-											src, dst, reviewedBuffer);
-								}
-							}
-
-							// Send the data on to its destination
-							// *** This is potentially trouble (what if
-							// the destination isn't ready to accept data?)
-							while (reviewedBuffer.remaining() > 0)
-							{
-								dst.write(reviewedBuffer);
-							}
+							moveData(
+								numberOfBytes, buffer,
+								src, dst, clientToServer);
 						}
-						else if (r == -1)  // EOF
+						else if (numberOfBytes == -1)  // EOF
 						{
-							// Cancel this key, otherwise this channel
-							// will repeatedly trigger select to tell us
-							// that it is at EOF.
-							key.cancel();
-
-							srcSocket = src.socket();
-							dstSocket = dst.socket();
-
-							// If the other half of the socket is
-							// already shutdown then go ahead and close
-							// the socket
-							if (srcSocket.isOutputShutdown())
-							{
-								logger.finer("Closing source socket");
-								srcSocket.close();
-							}
-							// Otherwise just close down the input
-							// stream.  This allows any return traffic
-							// to continue to flow.
-							else
-							{
-								logger.finest("Shutting down source input");
-								srcSocket.shutdownInput();
-							}
-
-							// Do the same thing for the destination,
-							// but using the reverse streams.
-							if (dstSocket.isInputShutdown())
-							{
-								logger.finer("Closing destination socket");
-								dstSocket.close();
-							}
-							else
-							{
-								logger.finest("Shutting down dest output");
-								dstSocket.shutdownOutput();
-							}
-
-							// If both halves of the connection are now
-							// closed, drop the entries from the
-							// direction maps
-							if (srcSocket.isClosed() && dstSocket.isClosed())
-							{
-								if (clientToServer)
-								{
-									clients.remove(src);
-									servers.remove(dst);
-								}
-								else
-								{
-									clients.remove(dst);
-									servers.remove(src);
-								}
-							}
+							handleEOF(key, src, dst, clientToServer);
 						}
 					} while (readMore);
 				}
 				catch (IOException e)
 				{
-					logger.warning(
-						"Error moving data between channels: " +
-						e.getMessage());
-
-					// Cancel this key for similar reasons as given
-					// in the EOF case above.  The key for the other
-					// half of the connection will get cancelled the
-					// next time it comes up in the select (see the else
-					// block of the if/else if/else section at the start
-					// of the KEYITER while loop).  We could add another
-					// map to keep track of the keys, thus allowing us
-					// to cancel it here, but the extra overhead doesn't
-					// seem worth it.
-					key.cancel();
-
-					// Drop the entries from the direction maps
-					if (clientToServer)
-					{
-						clients.remove(src);
-						servers.remove(dst);
-					}
-					else
-					{
-						clients.remove(dst);
-						servers.remove(src);
-					}
-
-					try
-					{
-						logger.fine("Closing channels");
-						src.close();
-						dst.close();
-					}
-					catch (IOException ioe)
-					{
-						logger.warning(
-							"Error closing channels: " + ioe.getMessage());
-					}
+					handleMoveException(e, key, src, dst, clientToServer);
 				}
 			}
+		}
+	}
+
+	private void moveData(
+		int numberOfBytes, ByteBuffer buffer,
+		SocketChannel src, SocketChannel dst,
+		boolean clientToServer) throws IOException
+	{
+		Iterator iter;
+		DistributionAlgorithm algo;
+		ByteBuffer reviewedBuffer;
+
+		if (clientToServer)
+		{
+			clientToServerByteCount += numberOfBytes;
+		}
+		else
+		{
+			serverToClientByteCount += numberOfBytes;
+		}
+
+		buffer.flip();
+
+		// Give each of the distribution algorithms a
+		// chance to inspect/modify the data stream
+		iter = distributionAlgorithms.iterator();
+		reviewedBuffer = buffer;
+		while (iter.hasNext())
+		{
+			algo = (DistributionAlgorithm) iter.next();
+			if (clientToServer)
+			{
+				reviewedBuffer =
+					algo.reviewClientToServerData(src, dst, reviewedBuffer);
+			}
+			else
+			{
+				reviewedBuffer =
+					algo.reviewServerToClientData(src, dst, reviewedBuffer);
+			}
+		}
+
+		// Send the data on to its destination
+		// *** This is potentially trouble (what if the destination
+		// isn't ready to accept data?)
+		while (reviewedBuffer.remaining() > 0)
+		{
+			dst.write(reviewedBuffer);
+		}
+	}
+
+	private void handleEOF(
+		SelectionKey key,
+		SocketChannel src, SocketChannel dst,
+		boolean clientToServer) throws IOException
+	{
+		Socket srcSocket;
+		Socket dstSocket;
+
+		// Cancel this key, otherwise this channel will repeatedly
+		// trigger select to tell us that it is at EOF.
+		key.cancel();
+
+		srcSocket = src.socket();
+		dstSocket = dst.socket();
+
+		if (halfClose)
+		{
+			// If the other half of the socket is already shutdown then
+			// go ahead and close the socket
+			if (srcSocket.isOutputShutdown())
+			{
+				logger.finer("Closing source socket");
+				srcSocket.close();
+			}
+			// Otherwise just close down the input stream.  This allows
+			// any return traffic to continue to flow.
+			else
+			{
+				logger.finest("Shutting down source input");
+				srcSocket.shutdownInput();
+			}
+
+			// Do the same thing for the destination, but using the
+			// reverse streams.
+			if (dstSocket.isInputShutdown())
+			{
+				logger.finer("Closing destination socket");
+				dstSocket.close();
+			}
+			else
+			{
+				logger.finest("Shutting down dest output");
+				dstSocket.shutdownOutput();
+			}
+
+			// If both halves of the connection are now closed, drop the
+			// entries from the direction maps
+			if (srcSocket.isClosed() && dstSocket.isClosed())
+			{
+				if (clientToServer)
+				{
+					clients.remove(src);
+					servers.remove(dst);
+				}
+				else
+				{
+					clients.remove(dst);
+					servers.remove(src);
+				}
+			}
+		}
+		else
+		{
+			// If half close isn't enabled, just close both sides of the
+			// connection.
+			logger.finer("Closing both sockets");
+			srcSocket.close();
+			dstSocket.close();
+
+			// And drop the entries from the direction maps
+			if (clientToServer)
+			{
+				clients.remove(src);
+				servers.remove(dst);
+			}
+			else
+			{
+				clients.remove(dst);
+				servers.remove(src);
+			}
+		}
+	}
+
+	private void handleMoveException(
+		Exception e, SelectionKey key,
+		SocketChannel src, SocketChannel dst,
+		boolean clientToServer)
+	{
+		logger.warning(
+			"Error moving data between channels: " + e.getMessage());
+
+		// Cancel this key for similar reasons as given in handleEOF()
+		// above.  The key for the other half of the connection will get
+		// cancelled the next time it comes up in the select (see the
+		// else block of the if/else if/else section at the start of the
+		// KEYITER while loop).  We could add another map to keep track
+		// of the keys, thus allowing us to cancel it here, but the
+		// extra overhead doesn't seem worth it.
+		key.cancel();
+
+		// Drop the entries from the direction maps
+		if (clientToServer)
+		{
+			clients.remove(src);
+			servers.remove(dst);
+		}
+		else
+		{
+			clients.remove(dst);
+			servers.remove(src);
+		}
+
+		try
+		{
+			logger.fine("Closing channels");
+			src.close();
+			dst.close();
+		}
+		catch (IOException ioe)
+		{
+			logger.warning("Error closing channels: " + ioe.getMessage());
 		}
 	}
 

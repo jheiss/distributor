@@ -83,6 +83,7 @@ public class Distributor
 	InetAddress bindAddress;
 	int port;
 	boolean terminateOnDisable;
+	boolean halfClose;
 	int connectionTimeout;
 	int connectionFailureLimit;
 	List targetGroups;
@@ -227,6 +228,13 @@ public class Distributor
 			}
 			logger.config("Terminate on disable:  " + terminateOnDisable);
 
+			halfClose = true;
+			if (rootElement.getAttribute("half_close").equals("no"))
+			{
+				halfClose = false;
+			}
+			logger.config("TCP half close:  " + halfClose);
+
 			connectionTimeout = 2000;
 			if (rootElement.getAttribute("connection_timeout").equals(""))
 			{
@@ -368,7 +376,8 @@ public class Distributor
 									Integer.parseInt(
 										targetElement.getAttribute("port")),
 									connectionFailureLimit,
-									terminateOnDisable));
+									terminateOnDisable,
+									halfClose));
 						}
 					}
 

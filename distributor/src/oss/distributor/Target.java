@@ -59,7 +59,7 @@ public class Target implements Runnable
 
 	protected Target(Distributor distributor,
 		InetAddress addr, int port,
-		int failureCountLimit, boolean terminateOnDisable)
+		int failureCountLimit, boolean terminateOnDisable, boolean halfClose)
 	{
 		this.distributor = distributor;
 		this.addr = addr;
@@ -73,7 +73,7 @@ public class Target implements Runnable
 
 		logger = distributor.getLogger();
 
-		dataMover = new DataMover(distributor, this);
+		dataMover = new DataMover(distributor, this, halfClose);
 
 		failureCount = 0;
 		totalConnectionCount = 0;
