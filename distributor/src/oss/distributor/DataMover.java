@@ -224,6 +224,11 @@ public class DataMover implements Runnable
 						logger.warning(
 							"Error moving data between channels: " +
 							e.getMessage());
+
+						// Cancel this key for similar reasons as given
+						// in the EOF case above.
+						key.cancel();
+
 						try
 						{
 							logger.finest("Closing channels");
