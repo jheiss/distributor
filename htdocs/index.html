@@ -26,34 +26,41 @@ Some of Distributor's more unique or advanced features:
 <A HREF="http://sourceforge.net/projects/distributor">Distributor's
 SourceForge project page, including downloads</A>
 
+<P>
+Distributor is written in Java and requires a
+<A HREF="http://java.sun.com/j2se/downloads.html">Java 1.4 compatible JVM</A>.
+</P>
+
 <H2>Service Testing</H2>
 
 <P>
 Distributor includes built-in support for testing the back end servers.
-The basic operation of a load balancer is to attempt to make a TCP connection
-to each back end server in turn until the load balancer finds a server it can
-connect to.  This is done for each incoming client connection.  This is fine
-for detecting gross failures like servers that are off, etc. but is
-insufficient for detecting more subtle failures like overloaded servers that
-accept a TCP connection but then immediately disconnect, or perhaps worse
-accept the TCP connection but then never transmit any data or disconnect.
-Or servers that are serving the wrong data for some reason.
+The basic operation of a load balancer is to attempt to make a TCP
+connection to each back end server in turn until the load balancer finds
+a server it can connect to.  This is done for each incoming client
+connection.  This is fine for detecting gross failures like servers that
+are off, etc. but is insufficient for detecting more subtle failures
+like overloaded servers that accept a TCP connection but then
+immediately disconnect, or perhaps worse accept the TCP connection but
+then never transmit any data or disconnect.  Or servers that are serving
+the wrong data for some reason.
 </P>
 
 <P>
-To handle these types of situations, the load balancer needs to regular scan
-the back end servers using a test that simulates a client request and ensure
-that each of the servers is serving valid data.  Any server that isn't doing so
-should cease to receive new connections until it is corrected.
+To handle these types of situations, the load balancer needs to
+regularly scan the back end servers using a test that simulates a client
+request and ensure that each of the servers is serving valid data.  Any
+server that isn't doing so should cease to receive new connections until
+it is corrected.
 </P>
 
 <P>
-Distributor includes just such a mechanism.  This testing can be as simple or
-as complicated as you need.  Distributor uses a plugin mechanism to make it as
-simple as possible to develop your own tests.  The tests can either be
-developed as a Java class or an external application in any language you want
-(shell script, Perl, C, etc.)  Distributor comes with an LDAP service test and
-an HTTP service test will be next.
+Distributor includes just such a mechanism.  This testing can be as
+simple or as complicated as you need.  Distributor uses a plugin
+mechanism to make it as simple as possible to develop your own tests.
+The tests can either be developed as a Java class or an external
+application in any language you want (shell script, Perl, C, etc.)
+Distributor comes with LDAP and HTTP service tests.
 </P>
 
 <H2>Client Disconnection</H2>
