@@ -93,6 +93,11 @@ public class Target implements Runnable
 		return port;
 	}
 
+	protected DataMover getDataMover()
+	{
+		return dataMover;
+	}
+
 	protected void addConnection(Connection conn)
 	{
 		synchronized (connections)
