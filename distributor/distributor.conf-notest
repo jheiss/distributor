@@ -2,12 +2,16 @@
 
 <distributor
 	port="22"
-	algorithm="roundrobin"
 	connection_timeout="2000"
+	connection_failure_limit="0"
 	control_port="3456"
 	service_type="none">
 
-	<target_group order="0">
+	<algorithms>
+		<algorithm name="roundrobin"/>
+	</algorithms>
+
+	<target_group>
 		<target hostname="server1.example.com" port="22"/>
 		<target hostname="server2.example.com" port="22"/>
 	</target_group>
@@ -15,9 +19,15 @@
 	<log type="console" level="all"/>
 	<log type="file" filename="distributor.log" level="info"/>
 
+	<!-- These can be ignored unless you're adding a new distribution algo -->
+	<algo_mapping name="hash" class="oss.distributor.HashDistributionAlgorithm"/>
+	<algo_mapping name="httpcookie" class="oss.distributor.HTTPCookieDistributionAlgorithm"/>
+	<algo_mapping name="roundrobin" class="oss.distributor.RoundRobinDistributionAlgorithm"/>
+
 	<!-- These can be ignored unless you're adding a new service type -->
 	<type_mapping service_type="ldap" class="oss.distributor.LDAPServiceTest"/>
 	<type_mapping service_type="http" class="oss.distributor.HTTPServiceTest"/>
 	<type_mapping service_type="script" class="oss.distributor.ScriptServiceTest"/>
+	<type_mapping service_type="connect" class="oss.distributor.ConnectServiceTest"/>
 </distributor>
 

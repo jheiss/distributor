@@ -2,12 +2,16 @@
 
 <distributor
 	port="389"
-	algorithm="roundrobin"
 	connection_timeout="2000"
+	connection_failure_limit="5"
 	control_port="3456"
 	service_type="ldap">
 
-	<target_group order="0">
+	<algorithms>
+		<algorithm name="roundrobin"/>
+	</algorithms>
+
+	<target_group>
 		<target hostname="ldap1.example.com" port="389"/>
 		<target hostname="ldap2.example.com" port="389"/>
 	</target_group>
@@ -24,9 +28,15 @@
 		</query>
 	</test_parameters>
 
+	<!-- These can be ignored unless you're adding a new distribution algo -->
+	<algo_mapping name="hash" class="oss.distributor.HashDistributionAlgorithm"/>
+	<algo_mapping name="httpcookie" class="oss.distributor.HTTPCookieDistributionAlgorithm"/>
+	<algo_mapping name="roundrobin" class="oss.distributor.RoundRobinDistributionAlgorithm"/>
+
 	<!-- These can be ignored unless you're adding a new service type -->
 	<type_mapping service_type="ldap" class="oss.distributor.LDAPServiceTest"/>
 	<type_mapping service_type="http" class="oss.distributor.HTTPServiceTest"/>
 	<type_mapping service_type="script" class="oss.distributor.ScriptServiceTest"/>
+	<type_mapping service_type="connect" class="oss.distributor.ConnectServiceTest"/>
 </distributor>
 
