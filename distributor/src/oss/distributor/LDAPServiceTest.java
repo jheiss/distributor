@@ -233,9 +233,6 @@ class LDAPServiceTest implements Runnable
 					try
 					{
 						target = (Target) i.next();
-						//result = test(
-							//target.getInetAddress().getHostName(),
-							//target.getPort());
 						LDAPBackgroundTest ldapTest =
 							new LDAPBackgroundTest(target);
 						synchronized (ldapTest)
@@ -297,10 +294,18 @@ class LDAPServiceTest implements Runnable
 
 		public void test()
 		{
+			// If the target hostname is an IPv6 address, wrap it in
+			// square brackets per RFC 2732.
+			// IPv6 addresses are identified by looking for colons, as
+			// colons should not occur in an IPv4 address or a hostname.
+			String hostname = target.getInetAddress().getHostName();
+			if (hostname.indexOf(':') != -1)
+			{
+				hostname = "[" + hostname + "]";
+			}
+
 			String serverURL =
-				"ldap://" +
-				target.getInetAddress().getHostName() + ":" +
-				target.getPort() + "/";
+				"ldap://" + hostname + ":" + target.getPort() + "/";
 			logger.fine("Server URL is " + serverURL);
 			env.put(Context.PROVIDER_URL, serverURL);
 
