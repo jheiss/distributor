@@ -43,7 +43,7 @@ class HashDistributionAlgorithm
 	int hashTimeout;
 	Map ipMap;
 	Map lastConnectTime;
-	Thread thread;
+	IpMapCleaner ipMapCleaner;
 
 	/*
 	 * Because the distribution algorithms are instantiated via
@@ -87,8 +87,7 @@ class HashDistributionAlgorithm
 		ipMap = new HashMap();
 		lastConnectTime = new HashMap();
 
-		thread = new Thread(this, getClass().getName());
-		thread.start();
+		ipMapCleaner = new IpMapCleaner();
 	}
 
 	protected boolean processNewClients()
@@ -181,53 +180,6 @@ class HashDistributionAlgorithm
 		}
 	}
 
-	/*
-	 * Slowly loop, purging expired entries from ipMap
-	 */
-	public void run()
-	{
-		Iterator iter;
-		InetAddress addr;
-		long lastConnect;
-		long sleepTime;
-
-		// Calculate the amount of time to sleep between loops, the
-		// lesser of (hashTimeout/4) or 15 minutes.
-		sleepTime = hashTimeout/4;
-		if (sleepTime > (15 * 60 * 1000))
-		{
-			sleepTime = (15 * 60 * 1000);
-		}
-
-		while (true)
-		{
-			synchronized(lastConnectTime)
-			{
-				iter = lastConnectTime.entrySet().iterator();
-				while(iter.hasNext())
-				{
-					Entry timeEntry = (Entry) iter.next();
-					addr = (InetAddress) timeEntry.getKey();
-					lastConnect = ((Long) timeEntry.getValue()).longValue();
-
-					if (lastConnect + hashTimeout < System.currentTimeMillis())
-					{
-						synchronized(ipMap)
-						{
-							ipMap.remove(addr);
-						}
-						lastConnectTime.remove(addr);
-					}
-				}
-			}
-
-			// Pause for a reasonable amount of time before doing it
-			// again.
-			try { Thread.sleep(sleepTime); }
-				catch (InterruptedException e) {}
-		}
-	}
-
 	public void connectionNotify(Connection conn)
 	{
 		// Store a mapping for this client's IP address so that future
@@ -263,6 +215,70 @@ class HashDistributionAlgorithm
 			lastConnectTime.size() + " entries in lastConnectTime Map";
 
 		return stats;
+	}
+
+	/*
+	 * Use a seperate class for our cleanup thread so that we don't
+	 * override the run() method in our parent class.
+	 */
+	class IpMapCleaner implements Runnable
+	{
+		Thread thread;
+
+		IpMapCleaner()
+		{
+			thread = new Thread(this, getClass().getName());
+			thread.start();
+		}
+
+		/*
+	 	* Slowly loop, purging expired entries from ipMap
+	 	*/
+		public void run()
+		{
+			Iterator iter;
+			InetAddress addr;
+			long lastConnect;
+			long sleepTime;
+
+			// Calculate the amount of time to sleep between loops, the
+			// lesser of (hashTimeout/4) or 15 minutes.
+			sleepTime = hashTimeout/4;
+			if (sleepTime > (15 * 60 * 1000))
+			{
+				sleepTime = (15 * 60 * 1000);
+			}
+
+			while (true)
+			{
+				synchronized(lastConnectTime)
+				{
+					iter = lastConnectTime.entrySet().iterator();
+					while(iter.hasNext())
+					{
+						Entry timeEntry = (Entry) iter.next();
+						addr = (InetAddress) timeEntry.getKey();
+						lastConnect =
+							((Long) timeEntry.getValue()).longValue();
+
+						if (lastConnect + hashTimeout <
+							System.currentTimeMillis())
+						{
+							synchronized(ipMap)
+							{
+								ipMap.remove(addr);
+							}
+							lastConnectTime.remove(addr);
+						}
+					}
+				}
+
+				// Pause for a reasonable amount of time before doing it
+				// again.
+				try { Thread.sleep(sleepTime); }
+					catch (InterruptedException e) {}
+			}
+		}
 	}
 }
 
