@@ -480,7 +480,7 @@ class ControllerConnection implements Runnable
 			newTarget = new Target(
 				distributor, addr, port,
 				distributor.getConnectionFailureLimit(),
-				distributor.getTerminate());
+				distributor.getTerminate(), distributor.getHalfClose());
 		}
 		catch (UnknownHostException e)
 		{
