@@ -168,18 +168,21 @@ class ControllerConnection implements Runnable
 	{
 		try
 		{
+			boolean interactive = false;
 			String line;
 			StringTokenizer st;
 			String command;
-			while(! closed)
+			READCMD: while(! closed)
 			{
-				// Print a prompt
-				out.print("distributor> ");
-				out.flush();
+				// Print a prompt for interactive users
+				if (interactive)
+				{
+					out.print("distributor> ");
+					out.flush();
+				}
 
 				// Read a command
 				line = in.readLine();
-				logger.finest("Read '" + line + "' from " + socket);
 
 				if (line == null)
 				{
@@ -187,8 +190,17 @@ class ControllerConnection implements Runnable
 					close();
 					return;
 				}
+
+				logger.finest("Read '" + line + "' from " + socket);
 				
 				st = new StringTokenizer(line);
+				if (! st.hasMoreTokens())
+				{
+					// User didn't provide a command, switch to
+					// iteractive mode and read another line
+					interactive = true;
+					continue READCMD;
+				}
 				command = st.nextToken();
 				logger.finer("Read '" + command + "' command from " + socket);
 
