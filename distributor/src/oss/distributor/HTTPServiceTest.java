@@ -26,13 +26,13 @@
 
 package oss.distributor;
 
+import java.io.*;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.List;
 import java.util.Iterator;
 import java.util.logging.Logger;
-import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.MalformedURLException;
@@ -51,6 +51,7 @@ public class HTTPServiceTest implements Runnable
 
 	boolean useSSL;
 	String path;
+	String userAgent;
 
 	public static final int REQUIREMENT_RESPONSE_CODE = 1;
 	public static final int REQUIREMENT_CONTENT_TYPE = 2;
@@ -96,6 +97,13 @@ public class HTTPServiceTest implements Runnable
 			useSSL = true;
 		}
 		logger.fine("Use SSL:  " + useSSL);
+
+		userAgent = "Distributor - http://distributor.sourceforge.net/";
+		if (! configElement.getAttribute("user_agent").equals(""))
+		{
+			userAgent = configElement.getAttribute("user_agent");
+		}
+		logger.fine("User agent:  " + userAgent);
 
 		if (! configElement.getAttribute("ssl_keystore").equals(""))
 		{
@@ -148,7 +156,7 @@ public class HTTPServiceTest implements Runnable
 							new Integer(REQUIREMENT_CONTENT_TYPE),
 							type);
 					}
-					else if (getNode.getNodeName().equals("document"))
+					else if (getNode.getNodeName().equals("document_text"))
 					{
 						Element documentTextElement = (Element) getNode;
 						String requiredText =
@@ -279,6 +287,9 @@ public class HTTPServiceTest implements Runnable
 				HttpURLConnection conn =
 					(HttpURLConnection) serverURL.openConnection();
 
+				// Set the user agent (aka "browser") field
+				conn.setRequestProperty("User-Agent", userAgent);
+
 				// Check the returned attributes to make sure everything the
 				// user required is present.
 				Iterator i = requirements.entrySet().iterator();
@@ -322,8 +333,24 @@ public class HTTPServiceTest implements Runnable
 							(String) requirementEntry.getValue();
 						logger.finer("Checking for document text: " +
 							requiredText);
-						logger.warning("Document text requirement checking not yet implemented");
-						// ***
+						BufferedReader docReader =
+							new BufferedReader(
+								new InputStreamReader(
+									conn.getInputStream()));
+						success = false;
+						String docLine;
+						while ((docLine = docReader.readLine()) != null)
+						{
+							if (docLine.indexOf(requiredText) != -1)
+							{
+								success = true;
+								logger.finer("Required text found");
+							}
+						}
+						if (! success)
+						{
+							logger.warning("Required text not found");
+						}
 						break;
 					}
 				}
