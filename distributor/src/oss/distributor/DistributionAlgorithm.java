@@ -48,8 +48,7 @@ public abstract class DistributionAlgorithm
 	int connectionTimeout;
 	TargetSelector targetSelector;
 	Selector selector;
-	Map connections;  // Map client SocketChannel -> Connection
-	Map connectStartTime;  // Map client SocketChannel -> Long
+	Map pendingConnections;
 	List failedConnections;
 
 	public DistributionAlgorithm(Distributor distributor)
@@ -63,8 +62,7 @@ public abstract class DistributionAlgorithm
 		logger = distributor.getLogger();
 		//logger = Logger.getLogger(getClass().getName());
 
-		connections = new HashMap();
-		connectStartTime = new HashMap();
+		pendingConnections = new HashMap();
 		failedConnections = new LinkedList();
 
 		try
@@ -78,13 +76,19 @@ public abstract class DistributionAlgorithm
 		}
 	}
 
-	public abstract void startThread();
-
+	/*
+ 	* This allows Distributor to delay some of our initialization until
+ 	* it is ready.  There are some things we need that Distributor may
+ 	* not have ready at the point at which it constructs us.
+ 	*/
 	public void finishInitialization()
 	{
 		connectionTimeout = distributor.getConnectionTimeout();
 		targetSelector = distributor.getTargetSelector();
+		startThread();
 	}
+
+	public abstract void startThread();
 
 	/*
 	 * TargetSelector uses this method to give us a client.
@@ -97,32 +101,18 @@ public abstract class DistributionAlgorithm
 	 */
 	public void initiateConnection(SocketChannel client, Target target)
 	{
+		SelectionKey key;
+
 		try
 		{
-			SocketChannel server = SocketChannel.open();
-			server.configureBlocking(false);
+			SocketChannel connToServer = SocketChannel.open();
+			connToServer.configureBlocking(false);
 
 			// Initiate connection
-			server.connect(
+			connToServer.connect(
 				new InetSocketAddress(
 					target.getInetAddress(),
 					target.getPort()));
-
-			synchronized(connections)
-			{
-				connections.put(
-					client,
-					new Connection(client, server, target));
-			}
-
-			// Record the time that the connection was initiated for later
-			// use in determining if it has timed out.
-			synchronized(connectStartTime)
-			{
-				connectStartTime.put(
-					client,
-					new Long(System.currentTimeMillis()));
-			}
 
 			// Register with selector
 			// This action is sychronized because if the selector is
@@ -140,10 +130,25 @@ public abstract class DistributionAlgorithm
 				// registering the channels
 				selector.wakeup();
 
-				// Use the client as the attachment since all of our
-				// HashMaps use the client as the key and we'll need that
-				// later to lookup this connection.
-				server.register(selector, SelectionKey.OP_CONNECT, client);
+				// Use the client as the attachment to the key since
+				// we'll need it later to lookup this connection's
+				// state info in the pendingConnections map
+				key = connToServer.register(
+					selector, SelectionKey.OP_CONNECT, client);
+
+				synchronized (pendingConnections)
+				{
+					// The target is needed later to create the Connection
+					//   object if this connection succeeds
+					// The time that the connection was initiated is used
+					//   later in determining if this connection has timed out.
+					// The selection key is needed so that it can be
+					//   canceled if the connection does time out.
+					pendingConnections.put(
+						client,
+						new PendingConnectionState(
+							target, System.currentTimeMillis(), key));
+				}
 			}
 		}
 		catch (IOException e)
@@ -170,6 +175,7 @@ public abstract class DistributionAlgorithm
 		SelectionKey key;
 		SocketChannel client;
 		SocketChannel server;
+		PendingConnectionState connState;
 		List completed = new LinkedList();
 
 		// Select for a limited amount of time so that users of this
@@ -184,8 +190,9 @@ public abstract class DistributionAlgorithm
 		}
 		catch (IOException e)
 		{
-			// What's it mean to get an I/O exception from select?
-			// Is it bad enough that we should return or exit?
+			// The only exceptions thrown by select seem to be the
+			// occasional (fairly rare) "Interrupted system call"
+			// which, from what I can tell, is safe to ignore.
 			logger.warning(
 				"Error when selecting for ready channel: " +
 				e.getMessage());
@@ -223,14 +230,15 @@ public abstract class DistributionAlgorithm
 					logger.fine(
 						"Connection from " + client +
 						" to " + server + " complete");
-					synchronized(connections)
+					synchronized(pendingConnections)
 					{
-						completed.add(connections.get(client));
-						connections.remove(client);
-					}
-					synchronized(connectStartTime)
-					{
-						connectStartTime.remove(client);
+						connState =
+							(PendingConnectionState)
+							pendingConnections.get(client);
+						completed.add(
+							new Connection(
+								client, server, connState.getTarget()));
+						pendingConnections.remove(client);
 					}
 					key.cancel();
 				}
@@ -248,13 +256,9 @@ public abstract class DistributionAlgorithm
 							"Error closing channel: " + ioe.getMessage());
 					}
 
-					synchronized(connections)
+					synchronized(pendingConnections)
 					{
-						connections.remove(client);
-					}
-					synchronized(connectStartTime)
-					{
-						connectStartTime.remove(client);
+						pendingConnections.remove(client);
 					}
 					synchronized(failedConnections)
 					{
@@ -275,29 +279,26 @@ public abstract class DistributionAlgorithm
 	{
 		// Add connections which have timed out to the list of
 		// connections that have failed for other reasons.
-		synchronized(connectStartTime)
+		synchronized(pendingConnections)
 		{
-			Entry timeEntry;
+			Entry pendingEntry;
 			SocketChannel client;
-			long startTime;
+			PendingConnectionState connState;
 
-			Iterator iter = connectStartTime.entrySet().iterator();
+			Iterator iter = pendingConnections.entrySet().iterator();
 			while(iter.hasNext())
 			{
-				timeEntry = (Entry) iter.next();
-				client = (SocketChannel) timeEntry.getKey();
-				startTime = ((Long) timeEntry.getValue()).longValue();
+				pendingEntry = (Entry) iter.next();
+				client = (SocketChannel) pendingEntry.getKey();
+				connState = (PendingConnectionState) pendingEntry.getValue();
 
-				if (startTime + connectionTimeout <
+				if (connState.getStartTime() + connectionTimeout <
 					System.currentTimeMillis())
 				{
-					synchronized(connections)
-					{
-						connections.remove(client);
-					}
-					// Already sychronized on connectStartTime
-					connectStartTime.remove(client);
+					connState.getServerKey().cancel();
+					iter.remove();
 
+					// Add this client to the failed list
 					synchronized(failedConnections)
 					{
 						failedConnections.add(client);
@@ -342,7 +343,28 @@ public abstract class DistributionAlgorithm
 	{
 		return(
 			getClass().getName() +
-			" with " + connections.size() + " pending connections");
+			" with " + pendingConnections.size() + " pending connections");
+	}
+
+	class PendingConnectionState
+	{
+		Target target;
+		long startTime;
+		SelectionKey serverConnectionKey;
+
+		PendingConnectionState(
+			Target target,
+			long startTime,
+			SelectionKey serverConnectionKey)
+		{
+			this.target = target;
+			this.startTime = startTime;
+			this.serverConnectionKey = serverConnectionKey;
+		}
+
+		Target getTarget() { return target; }
+		long getStartTime() { return startTime; }
+		SelectionKey getServerKey() { return serverConnectionKey; }
 	}
 }
 
