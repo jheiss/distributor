@@ -128,6 +128,9 @@ public class Target implements Runnable
 		failureCount++;
 		if (failureCount > failureCountLimit)
 		{
+			logger.warning(
+				"Target has exceeded failure count threshold");
+			logger.warning("Disabling:  " + this);
 			disable();
 		}
 		return failureCount;
@@ -169,7 +172,7 @@ public class Target implements Runnable
 					Connection conn = (Connection) i.next();
 					if (conn.isTerminated())
 					{
-						logger.finer("Removing terminiated connection");
+						logger.finer("Removing terminated connection");
 						i.remove();
 					}
 				}
