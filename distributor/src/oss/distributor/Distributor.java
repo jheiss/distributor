@@ -611,6 +611,11 @@ public class Distributor
 		return terminateOnDisable;
 	}
 
+	public boolean getHalfClose()
+	{
+		return halfClose;
+	}
+
 	/*
 	 * Returns a list of all of the Targets.  Useful for those who don't
 	 * care about the target groups.
