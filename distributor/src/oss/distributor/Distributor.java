@@ -38,9 +38,10 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Iterator;
 import java.util.logging.Logger;
+import java.util.logging.LogManager;
 import java.util.logging.Level;
 import java.util.logging.ConsoleHandler;
-//import java.util.logging.Handler;
+import java.util.logging.FileHandler;
 import java.text.ParseException;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.ServerSocketChannel;
@@ -75,23 +76,49 @@ public class Distributor
 	int balanceAlgorithm;
 	static final int ALGORITHM_ROUNDROBIN = 1;
 	static final int ALGORITHM_HASH = 2;
+	static final int ALGORITHM_LEAST_CONNECTIONS = 3;
+	static final int ALGORITHM_LOWEST_LOAD = 4;
 	Map hashAlgorithmMap;
 	List targetGroups;
 	Logger logger;
 	Object serviceTest;
 	public Distributor(String args[])
 	{
-		// We'll need the logger to report errors while parsing the
-		// config file so create it first.
-		// *** The user should have some more control over the
-		//     configuration of the logger
-		logger = Logger.getLogger("Distributor");
-		// This should stop the default handlers
-		logger.setUseParentHandlers(false);
-		logger.setLevel(Level.FINEST);
-		ConsoleHandler ch = new ConsoleHandler();
-		ch.setLevel(Level.FINEST);
-		logger.addHandler(ch);
+		//
+		// Prepare the Java logging system for use
+		//
+
+		// The Java logging system normally reads its default settings
+		// from <java home>/jre/lib/logging.properties.  However, we
+		// don't want those defaults used.  So we go through a bit of
+		// hackery to feed our own defaults to the logging system.
+		String loggingDefaultsString = new String();
+		// The default is XMLFormatter, which is too verbose for
+		// most folks.  The SimpleFormatter is a bit easier to read.
+		loggingDefaultsString +=
+			"java.util.logging.FileHandler.formatter = ";
+		loggingDefaultsString +=
+			"java.util.logging.SimpleFormatter\n";
+		// By default Java does not append to existing
+		// log files, which is probably not what users expect.
+		loggingDefaultsString +=
+			"java.util.logging.FileHandler.append = true\n";
+		ByteArrayInputStream loggingDefaultsStream =
+			new ByteArrayInputStream(loggingDefaultsString.getBytes());
+		try
+		{
+			LogManager.getLogManager().readConfiguration(loggingDefaultsStream);
+		}
+		catch (IOException e)
+		{
+			System.err.println("Error setting logging defaults:  " +
+				e.getMessage());
+			System.exit(1);
+		}
+
+		logger = Logger.getLogger("oss.distributor.Distributor");
+		// Let each handler pick its own level
+		logger.setLevel(Level.ALL);
 
 		//
 		// Read the configuration file
@@ -106,6 +133,58 @@ public class Distributor
 			Document configDoc = db.parse(args[0]);
 
 			Element rootElement = configDoc.getDocumentElement();
+
+			// Read the logging configuration first so we can use the
+			// logger for reporting errors with the rest of the
+			// configuration.
+			NodeList configChildren = rootElement.getChildNodes();
+			for (int i=0 ; i<configChildren.getLength() ; i++)
+			{
+				Node configNode = configChildren.item(i);
+				if (configNode.getNodeName().equals("log"))
+				{
+					Element logElement = (Element) configNode;
+
+					if (logElement.getAttribute("type").equals("console"))
+					{
+						ConsoleHandler ch = new ConsoleHandler();
+						Level consoleLevel = null;
+						try
+						{
+							consoleLevel =
+								parseLogLevel(logElement.getAttribute("level"));
+						}
+						catch (ParseException e)
+						{
+							System.err.println("Unknown log level");
+							System.exit(1);
+						}
+						ch.setLevel(consoleLevel);
+						logger.addHandler(ch);
+					}
+					else if (logElement.getAttribute("type").equals("file"))
+					{
+						FileHandler fh =
+							new FileHandler(
+								logElement.getAttribute("filename"));
+						Level fileLevel = null;
+						try
+						{
+							fileLevel =
+								parseLogLevel(logElement.getAttribute("level"));
+						}
+						catch (ParseException e)
+						{
+							System.err.println("Unknown log level");
+							System.exit(1);
+						}
+						fh.setLevel(fileLevel);
+						logger.addHandler(fh);
+					}
+				}
+			}
+
+			// The logger is now configured and can be used
 
 			bindAddress = null;
 			if (rootElement.getAttribute("bindaddr").equals("") ||
@@ -177,7 +256,6 @@ public class Distributor
 			// Once we've loaded them all from the config file we'll
 			// extract them into targetGroups in sorted order.
 			TreeMap tgTree = new TreeMap();
-			NodeList configChildren = rootElement.getChildNodes();
 			for (int i=0 ; i<configChildren.getLength() ; i++)
 			{
 				Node configNode = configChildren.item(i);
@@ -356,22 +434,22 @@ public class Distributor
 		}
 		catch (ParserConfigurationException e)
 		{
-			logger.severe("Error reading config file: " + e.getMessage());
+			System.err.println("Error reading config file: " + e.getMessage());
 			System.exit(1);
 		}
 		catch (SAXException e)
 		{
-			logger.severe("Error reading config file: " + e.getMessage());
+			System.err.println("Error reading config file: " + e.getMessage());
 			System.exit(1);
 		}
 		catch (IOException e)
 		{
-			logger.severe("Error reading config file: " + e.getMessage());
+			System.err.println("Error reading config file: " + e.getMessage());
 			System.exit(1);
 		}
 		catch (NumberFormatException e)
 		{
-			logger.severe("Error reading config file: " + e.getMessage());
+			System.err.println("Error reading config file: " + e.getMessage());
 			System.exit(1);
 		}
 
