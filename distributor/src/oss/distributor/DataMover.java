@@ -182,7 +182,7 @@ class DataMover implements Runnable
 			// Work through the list of channels that have data to read
 			readyKeys = selector.selectedKeys();
 			keyIter = readyKeys.iterator();
-			while (keyIter.hasNext())
+			KEYITER:  while (keyIter.hasNext())
 			{
 				key = (SelectionKey) keyIter.next();
 				keyIter.remove();
@@ -196,30 +196,36 @@ class DataMover implements Runnable
 					clientToServer = true;
 					dst = (SocketChannel) clients.get(src);
 				}
-				else
+				else if (servers.containsKey(src))
 				{
 					clientToServer = false;
 					dst = (SocketChannel) servers.get(src);
+				}
+				else
+				{
+					// We've been dropped from the maps because an
+					// IOException occurred previously, nothing to do
+					// but cancel our key and move on to the next ready
+					// key.
+					key.cancel();
+					continue KEYITER;
 				}
 
 				try
 				{
 					// Loop as long as the source has data to read
-					readMore = false;  // Assume there won't be more data
 					do  // while (readMore)
 					{
+						// Assume there won't be more data
+						readMore = false;
+
 						// Try to read data
 						buffer.clear();
 						r = src.read(buffer);
 						logger.finest("Read " + r + " bytes from " + src);
 						if (r > 0)  // Data was read
 						{
-							// If the buffer is full, the source will
-							// likely to have more data for us to read
-							if (! buffer.hasRemaining())
-							{
-								readMore = true;
-							}
+							readMore = true;
 
 							buffer.flip();
 
@@ -270,14 +276,6 @@ class DataMover implements Runnable
 							{
 								logger.finer("Closing source socket");
 								srcSocket.close();
-								if (clientToServer)
-								{
-									clients.remove(src);
-								}
-								else
-								{
-									servers.remove(src);
-								}
 							}
 							// Otherwise just close down the input
 							// stream.  This allows any return traffic
@@ -294,19 +292,28 @@ class DataMover implements Runnable
 							{
 								logger.finer("Closing destination socket");
 								dstSocket.close();
-								if (clientToServer)
-								{
-									servers.remove(dst);
-								}
-								else
-								{
-									clients.remove(dst);
-								}
 							}
 							else
 							{
 								logger.finest("Shutting down dest output");
 								dstSocket.shutdownOutput();
+							}
+
+							// If both halves of the connection are now
+							// closed, drop the entries from the
+							// direction maps
+							if (srcSocket.isClosed() && dstSocket.isClosed())
+							{
+								if (clientToServer)
+								{
+									clients.remove(src);
+									servers.remove(dst);
+								}
+								else
+								{
+									clients.remove(dst);
+									servers.remove(src);
+								}
 							}
 						}
 					} while (readMore);
@@ -318,7 +325,14 @@ class DataMover implements Runnable
 						e.getMessage());
 
 					// Cancel this key for similar reasons as given
-					// in the EOF case above.
+					// in the EOF case above.  The key for the other
+					// half of the connection will get cancelled the
+					// next time it comes up in the select (see the else
+					// block of the if/else if/else section at the start
+					// of the KEYITER while loop).  We could add another
+					// map to keep track of the keys, thus allowing us
+					// to cancel it here, but the extra overhead doesn't
+					// seem worth it.
 					key.cancel();
 
 					// Drop the entries from the direction maps
