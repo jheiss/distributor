@@ -1,6 +1,4 @@
 - Finish HTTP cookie distribution algorithm
-- Add 'memory' command to Controller which prints stats on memory
-  structures
 - Add 'reopenlog' command to Controller which re-opens log file for use
   after rotating log
 
