@@ -5,13 +5,19 @@ Steps to create a new release of Distributor:
 - Run 'cvs tag Release-x_x'
 - Run './cvs2cl.pl -f ChangeLog.auto -T'
 - Run 'ant clean dist'
-- Upload to upload.sourceforge.net
+- Upload to ftp://upload.sourceforge.net/incoming/
 - Go to http://sf.net/projects/distributor/ -> Admin -> File Releases
   and select Add Release
   - Release name is version number (i.e. 0.5)
-  - Architecture?? is Platform-Independent
-  - File types:
-    - .tar.gz:  Source .gz
-    - .zip:  Source .zip
-    - .MD5:  Other
+  - Upload ChangeLog
+  - Select files
+  - For each file (remember to do them one at a time)
+    - Processor is Platform-Independent
+    - File types:
+      - .tar.gz:  Source .gz
+      - .zip:  Source .zip
+      - .MD5:  Other
+  - Email release notice
+- Email release announcement to distributor-announce@lists.sourceforge.net
+- Submit new release to freshmeat
 
