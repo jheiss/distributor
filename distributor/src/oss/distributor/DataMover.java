@@ -442,8 +442,7 @@ class DataMover implements Runnable
 		// DelayedMover
 		if (reviewedBuffer.hasRemaining())
 		{
-			// *** Change to finer before leaving beta
-			logger.info("Delaying " + reviewedBuffer.remaining() +
+			logger.finer("Delaying " + reviewedBuffer.remaining() +
 				" bytes from " + src + " to " + dst);
 
 			// Copy the delayed data into a temporary buffer
@@ -851,8 +850,7 @@ class DataMover implements Runnable
 					{
 						numberOfBytes = dst.write(delayedBuffer);
 
-						// *** Change to finest before leaving beta
-						logger.info(
+						logger.finest(
 							"Wrote " + numberOfBytes +
 							" delayed bytes to " + dst + ", " +
 							delayedBuffer.remaining() +
