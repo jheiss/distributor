@@ -1,3 +1,23 @@
+0.6:
+	Rewrote round robin algorithm.  The previous version was
+      a quick hack.  It worked fairly well under normal
+      conditions (all targets enabled, etc.) but fell apart
+      otherwise.  This version should be a bit more robust.
+    Fixed some deadlock bugs by simplifying the methods that
+      are used to transfer clients/connections from one thread
+      to another.  Rather than do a lot of heavy processing,
+      the methods just put the client in a queue which is
+      processed later by the receiving thread.  This reduces
+      the number of data structures that are accessed by
+      multiple threads.
+    Found a better way to handle registering connections with
+      Selectors, by using queues along the same lines as the
+      last group of fixes.  The old method I was using required
+      much ugly hackery to avoid deadlocks.  The queueing method
+      is clean.
+    Added a 'memstats' command to Controller to assist in
+      detecting any memory leaks.  memstats reports the size of
+      all long-term data structures used by Distributor.
 0.5.5:
     Fixed a number of bugs that were triggered in various
       special cases, generally leading to Distributor throwing
