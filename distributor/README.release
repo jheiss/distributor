@@ -1,0 +1,15 @@
+Steps to create a new release of Distributor:
+
+- Bump version number in build.xml and distributor.init
+- Make sure ChangeLog is up to date
+- Run 'ant clean dist'
+- Upload to upload.sourceforge.net
+- Go to http://sf.net/projects/distributor/ -> Admin -> File Releases
+  and select Add Release
+  - Release name is version number (i.e. 0.5)
+  - Architecture?? is Platform-Independent
+  - File types:
+    - .tar.gz:  Source .gz
+    - .zip:  Source .zip
+    - .MD5:  Other
+
