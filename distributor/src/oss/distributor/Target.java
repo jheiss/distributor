@@ -47,6 +47,7 @@ public class Target implements Runnable
 	boolean enabled;  // Is this channel enabled?
 	boolean terminateOnDisable;
 	List connections;  // List of Connection's
+	long totalConnectionCount;
 	Logger logger;
 	DataMover dataMover;
 	Thread thread;
@@ -66,9 +67,6 @@ public class Target implements Runnable
 		this.failureCountLimit = failureCountLimit;
 		this.terminateOnDisable = terminateOnDisable;
 
-		enabled = true;
-		failureCount = 0;
-
 		// Use a linked list to speed up removing dead connections from
 		// the middle of the list.
 		connections = new LinkedList();
@@ -76,6 +74,10 @@ public class Target implements Runnable
 		logger = distributor.getLogger();
 
 		dataMover = new DataMover(distributor);
+
+		failureCount = 0;
+		totalConnectionCount = 0;
+		enabled = true;
 
 		thread = new Thread(this, getClass().getName());
 		thread.start();
@@ -98,6 +100,7 @@ public class Target implements Runnable
 			connections.add(conn);
 		}
 		dataMover.addConnection(conn);
+		totalConnectionCount++;
 	}
 
 	public synchronized void enable()
@@ -199,12 +202,14 @@ public class Target implements Runnable
 			
 		if (enabled)
 		{
-			string += " with " + numberOfConnections() + " connections";
+			string += ", " + numberOfConnections() + " current connections";
 		}
 		else
 		{
 			string += " DISABLED";
 		}
+
+		string += ", " + totalConnectionCount + " total";
 
 		return string;
 	}
