@@ -4,6 +4,7 @@
 	port="389"
 	algorithm="roundrobin"
 	connection_timeout="2000"
+	control_port="3456"
 	service_type="ldap">
 
 	<target_group order="0">
