@@ -12,7 +12,7 @@
 	<property name="build.dist" location="${build.dir}/dist"/>
 
 	<!-- Verson of the overall package, should be set automatically somehow -->
-	<property name="version" value="0.3"/>
+	<property name="version" value="0.4"/>
 
 	<!-- Location of imported files, i.e. files I didn't create -->
 	<property name="import.dir" location="import"/>
@@ -89,6 +89,7 @@
 				<include name="README"/>
 				<include name="README.distributor.conf"/>
 				<include name="INSTALL"/>
+				<include name="ChangeLog"/>
 				<include name="GPL"/>
 			</tarfileset>
 		</tar>
@@ -118,6 +119,7 @@
 				<include name="README"/>
 				<include name="README.distributor.conf"/>
 				<include name="INSTALL"/>
+				<include name="ChangeLog"/>
 				<include name="GPL"/>
 			</zipfileset>
 		</zip>
