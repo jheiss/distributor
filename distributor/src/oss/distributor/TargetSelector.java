@@ -62,11 +62,13 @@ public class TargetSelector implements Runnable
 	/*
 	 * This allows Distributor to delay some of our initialization until
 	 * it is ready.  There are some things we need that Distributor may
-	 * not have ready at the point at which it constructs us, so we wait
-	 * and retrieve them at the start of run().
+	 * not have ready at the point at which it constructs us.
 	 */
-	protected void startThread()
+	protected void finishInitialization()
 	{
+		logger = distributor.getLogger();
+		distributionAlgorithms = distributor.getDistributionAlgorithms();
+
 		thread.start();
 	}
 
@@ -146,10 +148,6 @@ public class TargetSelector implements Runnable
 		Iterator algoIter;
 		DistributionAlgorithm algo;
 		int i;
-
-		// Finish our initialization
-		logger = distributor.getLogger();
-		distributionAlgorithms = distributor.getDistributionAlgorithms();
 
 		while (true)
 		{
