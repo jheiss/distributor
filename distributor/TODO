@@ -4,4 +4,8 @@
   interface to Controller
   http://www.opennms.org/files/releases/joeSNMP/
   http://java.sun.com/products/JavaManagement/
+- Additional distribution algorithms:
+  Least connections
+  Least load (with a similar plugin architecture to the service tests
+    for determining load)
 
