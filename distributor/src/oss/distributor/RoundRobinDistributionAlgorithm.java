@@ -56,12 +56,6 @@ class RoundRobinDistributionAlgorithm
 		thread = new Thread(this, getClass().getName());
 	}
 
-	/*
-	 * This allows Distributor to delay some of our initialization until
-	 * it is ready.  There are some things we need that Distributor may
-	 * not have ready at the point at which it constructs us, so we wait
-	 * and retrieve them at the start of run().
-	 */
 	public void startThread()
 	{
 		thread.start();
@@ -89,6 +83,23 @@ class RoundRobinDistributionAlgorithm
 		int currentTargetNumber;
 		Target currentTarget;
 
+		// Check to see if we're out of available targets for this
+		// client.
+		// (Flagged by the previous invocation of this method by
+		// removing us from the Maps.)
+		synchronized(currentTargetGroups)
+		{
+			if (currentTargetGroups.get(client) == null)
+			{
+				// Give the client back to TargetSelector so it can try
+				// another distribution algorithm
+				logger.fine("Tried all targets for " + client +
+					" without success");
+				targetSelector.addUnconnectedClient(client);
+				return;
+			}
+		}
+
 		synchronized(currentTargetGroups)
 		{
 			currentTargetGroupNumber =
@@ -108,19 +119,6 @@ class RoundRobinDistributionAlgorithm
 		{
 			currentTarget =
 				(Target) currentTargetGroup.get(currentTargetNumber);
-		}
-
-		// Check to see if we're out of available targets
-		// (Flagged by the previous invocation of this method by
-		// removing us from the Maps.)
-		if (currentTargetGroup == null)
-		{
-			// Give the client back to TargetSelector so it can try
-			// another distribution algorithm
-			logger.fine("Tried all targets for " + client +
-				" without success");
-			targetSelector.addUnconnectedClient(client);
-			return;
 		}
 
 		// If we're trying the first target in the group, cycle the
@@ -204,10 +202,6 @@ class RoundRobinDistributionAlgorithm
 		Connection conn;
 		SocketChannel client;
 
-		// Finish any initialization that was delayed until Distributor
-		// was ready.
-		finishInitialization();
-
 		while (true)
 		{
 			// Both of the checkFor*Connections() methods return lists
@@ -220,23 +214,16 @@ class RoundRobinDistributionAlgorithm
 			while(iter.hasNext())
 			{
 				conn = (Connection) iter.next();
-				if (conn.getServer().isConnected())
+				synchronized(currentTargetGroups)
 				{
-					synchronized(currentTargetGroups)
-					{
-						currentTargetGroups.remove(conn.getClient());
-					}
-					synchronized(currentTargets)
-					{
-						currentTargets.remove(conn.getClient());
-					}
+					currentTargetGroups.remove(conn.getClient());
+				}
+				synchronized(currentTargets)
+				{
+					currentTargets.remove(conn.getClient());
+				}
 
-					targetSelector.addFinishedClient(conn);
-				}
-				else
-				{
-					tryNextTarget(conn.getClient());
-				}
+				targetSelector.addFinishedClient(conn);
 			}
 
 			failed = checkForFailedConnections();
