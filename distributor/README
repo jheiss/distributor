@@ -1,0 +1,13 @@
+Quick guide to running Distributor:
+
+- Edit distributor.conf, read README.distributor.conf for help
+- Get Java 1.4.0 or greater.  Distributor uses many features that were
+  introduced in Java 1.4.  http://java.sun.com/j2se/downloads.html
+  You can just get the JRE if all you want to do is run Distributor.  If
+  you want the compiler, etc. get the SDK.
+- Run Distributor.  If you've configured Distributor to listen on a
+  privileged port (<1024) then you'll need to run it as root.  Otherwise
+  it can as any user.  To quote the usage message:
+
+  Usage:  java Distributor /path/to/distributor.conf
+

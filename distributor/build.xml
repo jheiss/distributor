@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+
+<project default="compile" basedir=".">
+
+	<!-- Directory containing source code -->
+	<property name="src.dir" location="src"/>
+
+	<!-- Temporary build directories -->
+	<property name="build.dir" location="build"/>
+	<property name="build.classes" location="${build.dir}/classes"/>
+	<property name="build.lib" location="${build.dir}/lib"/>
+	<property name="build.dist" location="${build.dir}/dist"/>
+
+	<!-- Verson of the overall package, should be set automatically somehow -->
+	<property name="version" value="0.1"/>
+
+	<!-- Location of imported files, i.e. files I didn't create -->
+	<property name="import.dir" location="import"/>
+
+	<!-- Prepare the build directories for the compile target -->
+	<target name="prepare">
+		<mkdir dir="${build.dir}"/>
+		<mkdir dir="${build.classes}"/>
+		<mkdir dir="${build.lib}"/>
+		<mkdir dir="${build.dist}"/>
+	</target>
+
+	<target name="clean" description="Removes all generated files">
+		<delete dir="${build.dir}"/>
+	</target>
+
+	<target
+		name="compile"
+		depends="prepare"
+		description="Compiles the program">
+		<javac
+			srcdir="${src.dir}"
+			excludes="**/old/**"
+			destdir="${build.classes}"
+			debug="on"
+		/>
+	</target>
+
+	<target
+		name="jar"
+		depends="compile"
+		description="Makes a JAR file of the program">
+		<jar destfile="${build.lib}/Distributor-${version}.jar">
+			<fileset dir="${build.classes}" />
+			<!--<zipfileset src="${bc.jar}" excludes="META-INF/**"/>-->
+			<manifest>
+				<attribute
+					name="Main-Class"
+					value="oss/distributor/Distributor"/>
+			</manifest>
+		</jar>
+	</target>
+
+	<target
+		name="dist"
+		depends="compile"
+		description="Builds a distribution tarball">
+		<tar
+			destfile="${build.dist}/Distributor-${version}.tar.gz"
+			compression="gzip">
+			<!-- Include the source -->
+			<tarfileset
+				dir="${src.dir}"
+				prefix="Distributor-${version}/src"/>
+			<!-- And the compiled class files -->
+			<tarfileset
+				dir="${build.classes}"
+				prefix="Distributor-${version}/build/classes"/>
+			<!-- And some other misc. files -->
+			<tarfileset dir="." prefix="Cellar-${version}">
+				<include name="build.xml"/>
+				<include name="GPL"/>
+			</tarfileset>
+		</tar>
+	</target>
+
+</project>
+
