@@ -272,6 +272,24 @@ class ControllerConnection implements Runnable
 
 	protected void stats(StringTokenizer st)
 	{
+		// Display each distribution algorithm, which will show the
+		// number of pending connections being handled by each.
+		out.println("Distribution algorithms:");
+		List distributionAlgorithms =
+			distributor.getDistributionAlgorithms();
+		synchronized (distributionAlgorithms)
+		{
+			Iterator iter = distributionAlgorithms.iterator();
+			while (iter.hasNext())
+			{
+				DistributionAlgorithm algo =
+					(DistributionAlgorithm) iter.next();
+				out.println("  " + algo);
+			}
+		}
+
+		// Display all of the targets, which will show the number of
+		// established connections to each.
 		List targetGroups = distributor.getTargetGroups();
 		synchronized (targetGroups)
 		{
