@@ -69,14 +69,26 @@ class RoundRobinDistributionAlgorithm
 		thread.start();
 	}
 
-	public void tryToConnect(SocketChannel client)
+	protected void processNewClients()
 	{
-		synchronized(clientStates)
-		{
-			clientStates.put(client, new ClientState());
-		}
+		Iterator iter;
+		SocketChannel client;
 
-		tryNextTarget(client);
+		synchronized(newClients)
+		{
+			iter = newClients.iterator();
+			while(iter.hasNext())
+			{
+				client = (SocketChannel) iter.next();
+				iter.remove();
+
+				synchronized(clientStates)
+				{
+					clientStates.put(client, new ClientState());
+				}
+				tryNextTarget(client);
+			}
+		}
 	}
 
 	private void tryNextTarget(SocketChannel client)
@@ -130,6 +142,8 @@ class RoundRobinDistributionAlgorithm
 
 		while (true)
 		{
+			processNewClients();
+
 			// Both of the checkFor*Connections() methods return lists
 			// we don't have to worry about synchronizing.
 
@@ -185,17 +199,23 @@ class RoundRobinDistributionAlgorithm
 
 		synchronized(nextTargetIndicies)
 		{
+			// Ensure that nextTargetIndicies has an entry for the given
+			// target group, expand nextTargetIndicies if it doesn't.
+			if (targetGroupIndex > nextTargetIndicies.size() - 1)
+			{
+				for (
+					int i = nextTargetIndicies.size() ;
+					i <= targetGroupIndex ;
+					i++)
+				{
+					nextTargetIndicies.add(new Integer(0));
+				}
+			}
+
+
 			// Pull the current index out of the nextTargetIndicies List,
-			// starting at zero if there isn't currently an entry
-			try
-			{
-				indexInteger =
-					(Integer) nextTargetIndicies.get(targetGroupIndex);
-			}
-			catch (IndexOutOfBoundsException e)
-			{
-				indexInteger = new Integer(0);
-			}
+			indexInteger =
+				(Integer) nextTargetIndicies.get(targetGroupIndex);
 			index = indexInteger.intValue();
 
 			// Increment the counter, wrapping back to zero if
@@ -227,7 +247,7 @@ class RoundRobinDistributionAlgorithm
 					nextIndex = 0;
 				}
 			}
-			nextTargetIndicies.add(targetGroupIndex, new Integer(nextIndex));
+			nextTargetIndicies.set(targetGroupIndex, new Integer(nextIndex));
 		}
 
 		return index;
@@ -370,6 +390,19 @@ class RoundRobinDistributionAlgorithm
 
 			return nextTarget;
 		}
+	}
+
+	public String getMemoryStats(String indent)
+	{
+		String stats;
+
+		stats = super.getMemoryStats(indent) + "\n";
+		stats += indent +
+			clientStates.size() + " entries in clientStates Map\n";
+		stats += indent +
+			nextTargetIndicies.size() + " entries in nextTargetIndicies List";
+
+		return stats;
 	}
 }
 
