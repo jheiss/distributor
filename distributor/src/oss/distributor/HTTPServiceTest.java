@@ -224,10 +224,16 @@ public class HTTPServiceTest implements Runnable
 
 						if (result && ! target.isEnabled())
 						{
+							// I was tempted to log this at info but
+							// if someone has their log level set to
+							// warning then they'd only see the disable
+							// messages and not the enable messages.
+							logger.warning("Enabling: " + target);
 							target.enable();
 						}
 						else if (! result && target.isEnabled())
 						{
+							logger.warning("Disabling: " + target);
 							target.disable();
 						}
 					}
@@ -269,6 +275,7 @@ public class HTTPServiceTest implements Runnable
 					path);
 				logger.fine("Server URL is " + serverURL);
 
+				logger.fine("Opening connection to server");
 				HttpURLConnection conn =
 					(HttpURLConnection) serverURL.openConnection();
 
@@ -287,6 +294,8 @@ public class HTTPServiceTest implements Runnable
 					case REQUIREMENT_RESPONSE_CODE:
 						int requiredCode =
 							((Integer) requirementEntry.getValue()).intValue();
+						logger.finer("Checking for response code: " +
+							requiredCode);
 						if (conn.getResponseCode() != requiredCode)
 						{
 							logger.warning(
@@ -298,6 +307,8 @@ public class HTTPServiceTest implements Runnable
 					case REQUIREMENT_CONTENT_TYPE:
 						String requiredType =
 							(String) requirementEntry.getValue();
+						logger.finer("Checking for content type: " +
+							requiredType);
 						if (! conn.getContentType().equals(requiredType))
 						{
 							logger.warning(
@@ -309,12 +320,20 @@ public class HTTPServiceTest implements Runnable
 					case REQUIREMENT_DOCUMENT_TEXT:
 						String requiredText =
 							(String) requirementEntry.getValue();
+						logger.finer("Checking for document text: " +
+							requiredText);
+						logger.warning("Document text requirement checking not yet implemented");
 						// ***
 						break;
 					}
 				}
 
 				conn.disconnect();
+
+				if (success)
+				{
+					logger.fine("Server met all requirements");
+				}
 
 				finished = true;
 				synchronized (this)
@@ -326,6 +345,11 @@ public class HTTPServiceTest implements Runnable
 			{
 				logger.warning("Error building URL: " +
 					e.getMessage());
+
+				// We don't want the server to get disabled when this happens
+				finished = true;
+				success = true;
+
 				return;
 			}
 			catch (IOException e)
