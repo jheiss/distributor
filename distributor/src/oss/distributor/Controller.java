@@ -36,7 +36,7 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 import java.text.ParseException;
 
-public class Controller implements Runnable
+class Controller implements Runnable
 {
 	Distributor distributor;
 	Logger logger;
@@ -45,7 +45,7 @@ public class Controller implements Runnable
 	Thread thread;
 	ServerSocket controllerServer;
 
-	public Controller(Distributor distributor, int port)
+	protected Controller(Distributor distributor, int port)
 	{
 		this.distributor = distributor;
 		logger = distributor.getLogger();
@@ -56,7 +56,7 @@ public class Controller implements Runnable
 		conns = new LinkedList();
 
 		// Create a thread for ourselves and start it
-		thread = new Thread(this);
+		thread = new Thread(this, getClass().getName());
 		thread.start();
 	}
 
@@ -145,7 +145,7 @@ class ControllerConnection implements Runnable
 	Thread thread;
 	boolean closed = false;
 
-	public ControllerConnection(
+	protected ControllerConnection(
 		Socket socket, Distributor distributor) throws IOException
 	{
 		this.socket = socket;
@@ -160,7 +160,7 @@ class ControllerConnection implements Runnable
 		out = new PrintWriter(socket.getOutputStream(), true);
 
 		// Create a thread for ourselves and start it
-		thread = new Thread(this);
+		thread = new Thread(this, getClass().getName());
 		thread.start();
 	}
 
@@ -195,6 +195,10 @@ class ControllerConnection implements Runnable
 				if (command.equals("stats"))
 				{
 					stats(st);
+				}
+				else if (command.equals("threads"))
+				{
+					threads(st);
 				}
 				else if (command.equals("add"))
 				{
@@ -250,10 +254,11 @@ class ControllerConnection implements Runnable
 		}
 	}
 
-	public void help(StringTokenizer st)
+	protected void help(StringTokenizer st)
 	{
 		out.println("Commands:");
 		out.println("stats");
+		out.println("threads");
 		out.println("add");
 		out.println("remove");
 		out.println("addgroup");
@@ -265,7 +270,7 @@ class ControllerConnection implements Runnable
 		out.println("quit");
 	}
 
-	public void stats(StringTokenizer st)
+	protected void stats(StringTokenizer st)
 	{
 		List targetGroups = distributor.getTargetGroups();
 		synchronized (targetGroups)
@@ -295,7 +300,20 @@ class ControllerConnection implements Runnable
 		}
 	}
 
-	public void addTarget(StringTokenizer st)
+	/*
+	 * Print a list of the threads in Distributor
+	 */
+	protected void threads(StringTokenizer st)
+	{
+		Thread[] tarray = new Thread[Thread.activeCount()];
+		Thread.enumerate(tarray);
+		for (int i=0 ; i<tarray.length ; i++)
+		{
+			out.println(tarray[i]);
+		}
+	}
+
+	protected void addTarget(StringTokenizer st)
 	{
 		if (st.countTokens() != 3)
 		{
@@ -314,7 +332,9 @@ class ControllerConnection implements Runnable
 			port = Integer.parseInt(st.nextToken());
 
 			newTarget = new Target(
-				distributor, addr, port, distributor.getTerminate());
+				distributor, addr, port,
+				distributor.getConnectionFailureLimit(),
+				distributor.getTerminate());
 		}
 		catch (UnknownHostException e)
 		{
@@ -354,7 +374,7 @@ class ControllerConnection implements Runnable
 		}
 	}
 
-	public void removeTarget(StringTokenizer st)
+	protected void removeTarget(StringTokenizer st)
 	{
 		if (st.countTokens() != 3)
 		{
@@ -434,7 +454,7 @@ class ControllerConnection implements Runnable
 		}
 	}
 
-	public void addTargetGroup(StringTokenizer st)
+	protected void addTargetGroup(StringTokenizer st)
 	{
 		if (st.countTokens() != 1)
 		{
@@ -468,7 +488,7 @@ class ControllerConnection implements Runnable
 		}
 	}
 
-	public void removeTargetGroup(StringTokenizer st)
+	protected void removeTargetGroup(StringTokenizer st)
 	{
 		if (st.countTokens() != 1)
 		{
@@ -517,7 +537,7 @@ class ControllerConnection implements Runnable
 		out.println("Target group at position " + tgIndex + " removed");
 	}
 
-	public void disableTarget(StringTokenizer st)
+	protected void disableTarget(StringTokenizer st)
 	{
 		if (st.countTokens() != 3)
 		{
@@ -593,7 +613,7 @@ class ControllerConnection implements Runnable
 		}
 	}
 
-	public void enableTarget(StringTokenizer st)
+	protected void enableTarget(StringTokenizer st)
 	{
 		if (st.countTokens() != 3)
 		{
@@ -669,7 +689,7 @@ class ControllerConnection implements Runnable
 		}
 	}
 
-	public void setLogLevel(StringTokenizer st)
+	protected void setLogLevel(StringTokenizer st)
 	{
 		if (st.countTokens() != 1)
 		{
@@ -693,12 +713,12 @@ class ControllerConnection implements Runnable
 		logger.setLevel(newLevel);
 	}
 
-	public boolean isClosed()
+	protected boolean isClosed()
 	{
 		return closed;
 	}
 
-	public void close()
+	protected void close()
 	{
 		try
 		{
