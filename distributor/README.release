@@ -9,7 +9,7 @@ Steps to create a new release of Distributor:
 - Go to http://sf.net/projects/distributor/ -> Admin -> File Releases
   and select Add Release
   - Release name is version number (i.e. 0.5)
-  - Upload ChangeLog
+  - Upload ChangeLog (select "Preserve my pre-formatted text")
   - Select files
   - For each file (remember to do them one at a time)
     - Processor is Platform-Independent
