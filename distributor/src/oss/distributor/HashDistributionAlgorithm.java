@@ -34,7 +34,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.logging.Logger;
 import java.net.InetAddress;
-import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import org.w3c.dom.Element;
 
@@ -44,7 +43,6 @@ class HashDistributionAlgorithm
 	int hashTimeout;
 	Map ipMap;
 	Map lastConnectTime;
-	Selector selector;
 	Thread thread;
 
 	/*
@@ -97,41 +95,54 @@ class HashDistributionAlgorithm
 		thread.start();
 	}
 
-	public void tryToConnect(SocketChannel client)
+	protected void processNewClients()
 	{
-		// See if we have an existing mapping for this client.  If so,
-		// and if that target is enabled, try to send the client to it.
-		Target target = (Target) ipMap.get(
-			client.socket().getInetAddress());
-		if (target != null)
+		Iterator iter;
+		SocketChannel client;
+
+		synchronized (newClients)
 		{
-			logger.finer(
-				"Existing mapping for " +
-				client.socket().getInetAddress() +
-				" to " + target);
-			if (target.isEnabled())
+			iter = newClients.iterator();
+			while(iter.hasNext())
 			{
-				initiateConnection(client, target);
+				client = (SocketChannel) iter.next();
+				iter.remove();
+
+				// See if we have an existing mapping for this client.  If so,
+				// and if that target is enabled, try to send the client to it.
+				Target target = (Target) ipMap.get(
+					client.socket().getInetAddress());
+				if (target != null)
+				{
+					logger.finer(
+						"Existing mapping for " +
+						client.socket().getInetAddress() +
+						" to " + target);
+					if (target.isEnabled())
+					{
+						initiateConnection(client, target);
+					}
+					else
+					{
+						logger.finer(
+							"Existing mapping for " +
+							client.socket().getInetAddress() +
+							" points to a disabled target");
+						// Give the client back to TargetSelector so it can try
+						// another distribution algorithm
+						targetSelector.addUnconnectedClient(client);
+					}
+				}
+				else
+				{
+					logger.finer(
+						"No existing mapping for " +
+						client.socket().getInetAddress());
+					// Give the client back to TargetSelector so it can try
+					// another distribution algorithm
+					targetSelector.addUnconnectedClient(client);
+				}
 			}
-			else
-			{
-				logger.finer(
-					"Existing mapping for " +
-					client.socket().getInetAddress() +
-					" points to a disabled target");
-				// Give the client back to TargetSelector so it can try
-				// another distribution algorithm
-				targetSelector.addUnconnectedClient(client);
-			}
-		}
-		else
-		{
-			logger.finer(
-				"No existing mapping for " +
-				client.socket().getInetAddress());
-			// Give the client back to TargetSelector so it can try
-			// another distribution algorithm
-			targetSelector.addUnconnectedClient(client);
 		}
 	}
 
@@ -147,6 +158,8 @@ class HashDistributionAlgorithm
 
 		while (true)
 		{
+			processNewClients();
+
 			// Both of the checkFor*Connections() methods return lists
 			// we don't have to worry about synchronizing
 
@@ -213,6 +226,19 @@ class HashDistributionAlgorithm
 				conn.getClient().socket().getInetAddress(),
 				new Long(System.currentTimeMillis()));
 		}
+	}
+
+	public String getMemoryStats(String indent)
+	{
+		String stats;
+
+		stats = super.getMemoryStats(indent) + "\n";
+		stats += indent +
+			ipMap.size() + " entries in ipMap Map\n";
+		stats += indent +
+			lastConnectTime.size() + " entries in lastConnectTime Map";
+
+		return stats;
 	}
 }
 
