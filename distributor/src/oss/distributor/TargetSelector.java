@@ -174,7 +174,7 @@ public class TargetSelector implements Runnable
 			synchronized (needsDistributing)
 			{
 				iter = needsDistributing.iterator();
-				while (iter.hasNext())
+				NEEDSDIST: while (iter.hasNext())
 				{
 					client = (SocketChannel) iter.next();
 					iter.remove();
@@ -207,10 +207,13 @@ public class TargetSelector implements Runnable
 						else
 						{
 							// No more algorithms available, disconnect
+							// and continue on to the next client.
 							logger.warning(
 								"Unable to find a working target for client " +
 								client);
+							currentAlgorithm.remove(client);
 							try { client.close(); } catch (IOException e) {}
+							continue NEEDSDIST;
 						}
 					}
 
@@ -256,9 +259,7 @@ public class TargetSelector implements Runnable
 					}
 
 					// Yank them from currentAlgorithm
-					algo =
-						(DistributionAlgorithm)
-							currentAlgorithm.remove(conn.getClient());
+					currentAlgorithm.remove(conn.getClient());
 
 					// Register them with the Target
 					logger.finer(
