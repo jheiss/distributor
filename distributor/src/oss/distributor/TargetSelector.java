@@ -200,7 +200,7 @@ public class TargetSelector implements Runnable
 				else
 				{
 					i = distributionAlgorithms.indexOf(algo);
-					if (i < distributionAlgorithms.size())
+					if (i < (distributionAlgorithms.size() - 1))
 					{
 						algo =
 							(DistributionAlgorithm)
