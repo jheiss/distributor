@@ -67,7 +67,7 @@ class ScriptServiceTest implements Runnable
 			logger.warning("Invalid frequency, using default:  " +
 				e.getMessage());
 		}
-		logger.fine("Test frequency:  " + frequency);
+		logger.config("Test frequency:  " + frequency);
 
 		timeout = 5000;  // Default of 5s
 		try
@@ -80,10 +80,10 @@ class ScriptServiceTest implements Runnable
 			logger.warning("Invalid timeout, using default:  " +
 				e.getMessage());
 		}
-		logger.fine("Test timeout:  " + timeout);
+		logger.config("Test timeout:  " + timeout);
 
 		script = configElement.getAttribute("script");
-		logger.fine("Script:  " + script);
+		logger.config("Script:  " + script);
 		if (script == null)
 		{
 			logger.severe("A script is required");

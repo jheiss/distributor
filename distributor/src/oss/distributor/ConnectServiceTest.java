@@ -64,7 +64,7 @@ class ConnectServiceTest implements Runnable
 			logger.warning("Invalid frequency, using default:  " +
 				e.getMessage());
 		}
-		logger.fine("Test frequency:  " + frequency);
+		logger.config("Test frequency:  " + frequency);
 
 		timeout = 2000;  // Default of 2s
 		try
@@ -77,7 +77,7 @@ class ConnectServiceTest implements Runnable
 			logger.warning("Invalid timeout, using default:  " +
 				e.getMessage());
 		}
-		logger.fine("Test timeout:  " + timeout);
+		logger.config("Test timeout:  " + timeout);
 
 		thread = new Thread(this, getClass().getName());
 		thread.start();

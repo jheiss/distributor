@@ -80,7 +80,7 @@ class HTTPServiceTest implements Runnable
 			logger.warning("Invalid frequency, using default:  " +
 				e.getMessage());
 		}
-		logger.fine("Test frequency:  " + frequency);
+		logger.config("Test frequency:  " + frequency);
 
 		timeout = 5000;  // Default of 5s
 		try
@@ -93,21 +93,21 @@ class HTTPServiceTest implements Runnable
 			logger.warning("Invalid timeout, using default:  " +
 				e.getMessage());
 		}
-		logger.fine("Test timeout:  " + timeout);
+		logger.config("Test timeout:  " + timeout);
 
 		useSSL = false;
 		if (configElement.getAttribute("use_ssl").equals("yes"))
 		{
 			useSSL = true;
 		}
-		logger.fine("Use SSL:  " + useSSL);
+		logger.config("Use SSL:  " + useSSL);
 
 		userAgent = "Distributor - http://distributor.sourceforge.net/";
 		if (! configElement.getAttribute("user_agent").equals(""))
 		{
 			userAgent = configElement.getAttribute("user_agent");
 		}
-		logger.fine("User agent:  " + userAgent);
+		logger.config("User agent:  " + userAgent);
 
 		if (! configElement.getAttribute("ssl_keystore").equals(""))
 		{
@@ -115,7 +115,7 @@ class HTTPServiceTest implements Runnable
 				"javax.net.ssl.trustStore",
 				configElement.getAttribute("ssl_keystore"));
 		}
-		logger.fine("SSL keystore:  " +
+		logger.config("SSL keystore:  " +
 			System.getProperty("javax.net.ssl.trustStore"));
 
 		// *** All of the auth related attributes are ignored for now
@@ -184,8 +184,8 @@ class HTTPServiceTest implements Runnable
 				new Integer(REQUIREMENT_RESPONSE_CODE),
 				new Integer(HttpURLConnection.HTTP_OK));
 		}
-		logger.fine("Path:  " + path);
-		logger.fine("Requirements:  " + requirements);
+		logger.config("Path:  " + path);
+		logger.config("Requirements:  " + requirements);
 
 		thread = new Thread(this, getClass().getName());
 		thread.start();

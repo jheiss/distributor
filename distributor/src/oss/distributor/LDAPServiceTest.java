@@ -91,7 +91,7 @@ class LDAPServiceTest implements Runnable
 			logger.warning("Invalid frequency, using default:  " +
 				e.getMessage());
 		}
-		logger.fine("Test frequency:  " + frequency);
+		logger.config("Test frequency:  " + frequency);
 
 		timeout = 5000;  // Default of 5s
 		try
@@ -104,7 +104,7 @@ class LDAPServiceTest implements Runnable
 			logger.warning("Invalid timeout, using default:  " +
 				e.getMessage());
 		}
-		logger.fine("Test timeout:  " + timeout);
+		logger.config("Test timeout:  " + timeout);
 
 		if (configElement.getAttribute("ssl_type").equals("starttls"))
 		{
@@ -118,7 +118,7 @@ class LDAPServiceTest implements Runnable
 		{
 			sslType = SSL_NONE;
 		}
-		logger.fine("SSL type:  " + sslType);
+		logger.config("SSL type:  " + sslType);
 
 		if (! configElement.getAttribute("ssl_keystore").equals(""))
 		{
@@ -126,7 +126,7 @@ class LDAPServiceTest implements Runnable
 				"javax.net.ssl.trustStore",
 				configElement.getAttribute("ssl_keystore"));
 		}
-		logger.fine("SSL keystore:  " +
+		logger.config("SSL keystore:  " +
 			System.getProperty("javax.net.ssl.trustStore"));
 
 		// *** All of the auth related attributes are ignored for now
@@ -183,8 +183,8 @@ class LDAPServiceTest implements Runnable
 			System.exit(1);  // ***
 		}
 
-		logger.fine("Search DN:  " + searchDN);
-		logger.fine("Required attributes:  " + requiredAttributes);
+		logger.config("Search DN:  " + searchDN);
+		logger.config("Required attributes:  " + requiredAttributes);
 
 		// Populate requiredAttributeNames with a list of the keys of
 		// the requiredAttributes hash.  This is used later to tell the
