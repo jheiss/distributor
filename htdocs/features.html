@@ -1,0 +1,127 @@
+<HTML>
+
+<HEAD>
+<TITLE>Distributor Features</TITLE>
+</HEAD>
+
+<BODY>
+
+<H1>Distributor Features</H1>
+
+<P>
+Some of <A HREF="/">Distributor's</A> more unique or advanced features:
+</P>
+
+<H2>Service Testing</H2>
+
+<P>
+Distributor includes built-in support for testing the back end servers.
+The basic operation of a load balancer is to attempt to make a TCP
+connection to each back end server in turn until the load balancer finds
+a server it can connect to.  This is done for each incoming client
+connection.  This is fine for detecting gross failures like servers that
+are off, etc. but is insufficient for detecting more subtle failures
+like overloaded servers that accept a TCP connection but then
+immediately disconnect, or perhaps worse accept the TCP connection but
+then never transmit any data or disconnect.  Or servers that are serving
+the wrong data for some reason.
+</P>
+
+<P>
+To handle these types of situations, the load balancer needs to
+regularly scan the back end servers using a test that simulates a client
+request and ensure that each of the servers is serving valid data.  Any
+server that isn't doing so should cease to receive new connections until
+it is corrected.
+</P>
+
+<P>
+Distributor includes just such a mechanism.  This testing can be as
+simple or as complicated as you need.  Distributor uses a plugin
+mechanism to make it as simple as possible to develop your own tests.
+The tests can either be developed as a Java class or an external
+application in any language you want (shell script, Perl, C, etc.)
+Distributor comes with LDAP and HTTP service tests.
+</P>
+
+<H2>Client Disconnection</H2>
+
+<P>
+One possible failure mode mentioned earlier is a server that accepts a TCP
+connection but then never transmits data or disconnects.  This could leave
+clients stuck in a bad situation.  In some cases you may wish that the load
+balancer would terminate all of the connections to a server when it detects
+that the server is not serving valid data.  This might allow the clients to
+reconnect to a functioning server, for example.  Distributor allows you to
+enable this behavior if you desire.
+</P>
+
+<H2>Online Control</H2>
+
+<P>
+Distributor supports online (i.e. while it is running) control of certain
+configurables (enabling/disabling servers, log levels, etc.) as well as
+statistics reports.  Access is via a TCP port available only to localhost on
+the machine running the load balancer[1].  Interactive control can be
+accomplished via telnet and scripting is fairly easy using something like
+<A HREF="http://www.atstake.com/research/tools/network_utilities/">netcat</A>.
+</P>
+
+<P>
+[1] No, this isn't the most advanced security in the world.  However, you
+probably shouldn't be using a box with untrusted users as a load balancer.
+Code to implement some form of authentication would be welcome.
+</P>
+
+<H2>Grouping of Servers</H2>
+
+<P>
+You can group servers into multiple groups.  Distributor will distribute
+connections to servers in the first group unless it detects that all of the
+servers in that group are unavailable, then it will rollover to the servers in
+the next group, etc.  This allows you to have backup servers that don't get
+traffic until your primaries servers are down.
+</P>
+
+<H2>Connection Distribution Methods</H2>
+
+<P>
+Distributor offers two algorithms for distributing connections to back end
+servers.  The default is round robin, distributor maintains a list of the
+servers and just picks the next one in the list for each connection.  This
+should maintain a fairly even load on the servers.
+</P>
+
+<P>
+If your service requires that clients always get connected to the same back end
+server you can choose the hash algorithm.  In this case distributor maintains a
+hash table of client IP addresses and the server they were first connected to.
+When a new connection from a client comes in distributor first tries to connect
+the client to the same server it was connected to previously.  If that server
+is down, or if the client hasn't connected before, distributor falls back to
+the round robin algorithm.
+</P>
+
+<H2>"Competition"</H2>
+
+<P>
+Similar Open Source software:
+</P>
+
+<UL>
+<LI><A HREF="http://balance.sourceforge.net/">balance</A></LI>
+<LI><A HREF="http://siag.nu/pen/">pen</A></LI>
+</UL>
+
+<a href="http://sourceforge.net"><img
+src="http://sourceforge.net/sflogo.php?group_id=28825&type=2"
+width="125" height="37" border="0" alt="SourceForge.net Logo"></a>
+
+<P>
+$Id$
+</P>
+
+</BODY>
+
+</HTML>
+
