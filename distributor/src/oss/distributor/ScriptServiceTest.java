@@ -138,10 +138,16 @@ public class ScriptServiceTest implements Runnable
 
 						if (result && ! target.isEnabled())
 						{
+							// I was tempted to log this at info but
+							// if someone has their log level set to
+							// warning then they'd only see the disable
+							// messages and not the enable messages.
+							logger.warning("Enabling: " + target);
 							target.enable();
 						}
 						else if (! result && target.isEnabled())
 						{
+							logger.warning("Disabling: " + target);
 							target.disable();
 						}
 					}
@@ -178,6 +184,7 @@ public class ScriptServiceTest implements Runnable
 				cmdarray[1] = server;
 				cmdarray[2] = Integer.toString(port);
 
+				logger.fine("Executing script");
 				Process proc = Runtime.getRuntime().exec(cmdarray);
 
 				boolean procDone = false;
@@ -193,10 +200,13 @@ public class ScriptServiceTest implements Runnable
 
 				if (proc.exitValue() == 0)
 				{
+					logger.fine("Script returned zero, server fine");
 					success = true;
 				}
 				else
 				{
+					logger.warning(
+						"Script returned non-zero, server has failed");
 					success = false;
 				}
 
@@ -210,6 +220,14 @@ public class ScriptServiceTest implements Runnable
 			{
 				logger.warning("Error when executing script: " +
 					e.getMessage());
+
+				// The most likely causes of an IOException are that
+				// the admin supplied a non-existent script or we don't
+				// have permission to execute it.
+				// We don't want the server to get disabled when this happens
+				finished = true;
+				success = true;
+
 				return;
 			}
 		}
