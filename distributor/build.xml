@@ -12,7 +12,7 @@
 	<property name="build.dist" location="${build.dir}/dist"/>
 
 	<!-- Verson of the overall package, should be set automatically somehow -->
-	<property name="version" value="0.4"/>
+	<property name="version" value="0.5"/>
 
 	<!-- Location of imported files, i.e. files I didn't create -->
 	<property name="import.dir" location="import"/>
@@ -35,7 +35,6 @@
 		description="Compiles the program">
 		<javac
 			srcdir="${src.dir}"
-			excludes="**/old/**"
 			destdir="${build.classes}"
 			debug="on"
 		/>
@@ -70,7 +69,6 @@
 			<!-- Include the source -->
 			<tarfileset
 				dir="${src.dir}"
-				excludes="**/old/**"
 				prefix="distributor-${version}/src"/>
 			<!-- And the compiled class files -->
 			<tarfileset
@@ -86,8 +84,10 @@
 				<include name="distributor.conf"/>
 				<include name="distributor.conf-ldap"/>
 				<include name="distributor.conf-notest"/>
+				<include name="distributor.init"/>
 				<include name="README"/>
 				<include name="README.distributor.conf"/>
+				<include name="README.release"/>
 				<include name="INSTALL"/>
 				<include name="ChangeLog"/>
 				<include name="GPL"/>
@@ -100,7 +100,6 @@
 			<!-- Include the source -->
 			<zipfileset
 				dir="${src.dir}"
-				excludes="**/old/**"
 				prefix="distributor-${version}/src"/>
 			<!-- And the compiled class files -->
 			<zipfileset
@@ -116,8 +115,10 @@
 				<include name="distributor.conf"/>
 				<include name="distributor.conf-ldap"/>
 				<include name="distributor.conf-notest"/>
+				<include name="distributor.init"/>
 				<include name="README"/>
 				<include name="README.distributor.conf"/>
+				<include name="README.release"/>
 				<include name="INSTALL"/>
 				<include name="ChangeLog"/>
 				<include name="GPL"/>
