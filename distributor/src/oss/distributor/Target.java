@@ -169,7 +169,7 @@ public class Target implements Runnable
 					Connection conn = (Connection) i.next();
 					if (conn.isTerminated())
 					{
-						logger.fine("Removing terminiated connection " + conn);
+						logger.finer("Removing terminiated connection");
 						i.remove();
 					}
 				}

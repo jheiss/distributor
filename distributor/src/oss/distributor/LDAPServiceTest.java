@@ -329,7 +329,7 @@ class LDAPServiceTest implements Runnable
 					SSLSession sess = tls.negotiate();
 				}
 
-				logger.fine("Getting attributes from server");
+				logger.finer("Getting attributes from server");
 				Attributes returnedAttributes =
 					ctx.getAttributes(searchDN, requiredAttributeNames);
 
