@@ -35,13 +35,11 @@ import java.util.logging.Logger;
 import java.nio.channels.SocketChannel;
 import org.w3c.dom.Element;
 
-class RoundRobinDistributionAlgorithm
-	extends DistributionAlgorithm implements Runnable
+class RoundRobinDistributionAlgorithm extends DistributionAlgorithm
 {
 	Map clientStates;
 	List nextTargetIndicies;
 	List targetGroups;
-	Thread thread;
 
 	/*
 	 * Because the distribution algorithms are instantiated via
@@ -54,8 +52,6 @@ class RoundRobinDistributionAlgorithm
 
 		clientStates = new HashMap();
 		nextTargetIndicies = new ArrayList();
-
-		thread = new Thread(this, getClass().getName());
 	}
 
 	public void finishInitialization()
@@ -64,15 +60,11 @@ class RoundRobinDistributionAlgorithm
 		targetGroups = distributor.getTargetGroups();
 	}
 
-	public void startThread()
-	{
-		thread.start();
-	}
-
-	protected void processNewClients()
+	protected boolean processNewClients()
 	{
 		Iterator iter;
 		SocketChannel client;
+		boolean didSomething = false;
 
 		synchronized(newClients)
 		{
@@ -87,8 +79,12 @@ class RoundRobinDistributionAlgorithm
 					clientStates.put(client, new ClientState());
 				}
 				tryNextTarget(client);
+
+				didSomething = true;
 			}
 		}
+
+		return didSomething;
 	}
 
 	private void tryNextTarget(SocketChannel client)
@@ -132,28 +128,19 @@ class RoundRobinDistributionAlgorithm
 		}
 	}
 
-	public void run()
+	public void processCompletedConnections(List completedConnections)
 	{
-		List completed;
-		List failed;
 		Iterator iter;
 		Connection conn;
-		SocketChannel client;
 
-		while (true)
+		synchronized (completedConnections)
 		{
-			processNewClients();
-
-			// Both of the checkFor*Connections() methods return lists
-			// we don't have to worry about synchronizing.
-
-			// checkForCompletedConnections blocks in a select (with a
-			// timeout), which keeps us from going into a tight loop.
-			completed = checkForCompletedConnections();
-			iter = completed.iterator();
+			iter = completedConnections.iterator();
 			while(iter.hasNext())
 			{
 				conn = (Connection) iter.next();
+				iter.remove();
+
 				synchronized(clientStates)
 				{
 					clientStates.remove(conn.getClient());
@@ -161,12 +148,22 @@ class RoundRobinDistributionAlgorithm
 
 				targetSelector.addFinishedClient(conn);
 			}
+		}
+	}
 
-			failed = checkForFailedConnections();
-			iter = failed.iterator();
+	public void processFailedConnections(List failedConnections)
+	{
+		Iterator iter;
+		SocketChannel client;
+
+		synchronized (failedConnections)
+		{
+			iter = failedConnections.iterator();
 			while(iter.hasNext())
 			{
 				client = (SocketChannel) iter.next();
+				iter.remove();
+
 				tryNextTarget(client);
 			}
 		}

@@ -63,7 +63,7 @@ class HashDistributionAlgorithm
 		 * environment.  Reasonable values probably range anywhere from
 		 * one hour to a couple of days.
 	 	 */
-		hashTimeout = 1800000;
+		hashTimeout = 1800000;  // 30 minutes
 		if (configElement.getAttribute("hash_timeout").equals(""))
 		{
 			logger.warning("No hash timeout specified, using default");
@@ -88,17 +88,14 @@ class HashDistributionAlgorithm
 		lastConnectTime = new HashMap();
 
 		thread = new Thread(this, getClass().getName());
-	}
-
-	public void startThread()
-	{
 		thread.start();
 	}
 
-	protected void processNewClients()
+	protected boolean processNewClients()
 	{
 		Iterator iter;
 		SocketChannel client;
+		boolean didSomething = false;
 
 		synchronized (newClients)
 		{
@@ -142,46 +139,68 @@ class HashDistributionAlgorithm
 					// another distribution algorithm
 					targetSelector.addUnconnectedClient(client);
 				}
+
+				didSomething = true;
+			}
+		}
+
+		return didSomething;
+	}
+
+	public void processCompletedConnections(List completedConnections)
+	{
+		Iterator iter;
+		Connection conn;
+
+		synchronized (completedConnections)
+		{
+			iter = completedConnections.iterator();
+			while (iter.hasNext())
+			{
+				conn = (Connection) iter.next();
+				iter.remove();
+				targetSelector.addFinishedClient(conn);
 			}
 		}
 	}
 
+	public void processFailedConnections(List failedConnections)
+	{
+		Iterator iter;
+		SocketChannel client;
+
+		synchronized (failedConnections)
+		{
+			iter = failedConnections.iterator();
+			while (iter.hasNext())
+			{
+				client = (SocketChannel) iter.next();
+				iter.remove();
+				targetSelector.addUnconnectedClient(client);
+			}
+		}
+	}
+
+	/*
+	 * Slowly loop, purging expired entries from ipMap
+	 */
 	public void run()
 	{
-		List completed;
-		List failed;
 		Iterator iter;
-		Connection conn;
-		SocketChannel client;
 		InetAddress addr;
 		long lastConnect;
+		long sleepTime;
+
+		// Calculate the amount of time to sleep between loops, the
+		// lesser of (hashTimeout/4) or 15 minutes.
+		sleepTime = hashTimeout/4;
+		if (sleepTime > (15 * 60 * 1000))
+		{
+			sleepTime = (15 * 60 * 1000);
+		}
 
 		while (true)
 		{
-			processNewClients();
-
-			// Both of the checkFor*Connections() methods return lists
-			// we don't have to worry about synchronizing
-
-			// checkForCompletedConnections blocks in a select (with a
-			// timeout), which keeps us from going into a tight loop.
-			completed = checkForCompletedConnections();
-			iter = completed.iterator();
-			while(iter.hasNext())
-			{
-				conn = (Connection) iter.next();
-				targetSelector.addFinishedClient(conn);
-			}
-
-			failed = checkForFailedConnections();
-			iter = failed.iterator();
-			while(iter.hasNext())
-			{
-				client = (SocketChannel) iter.next();
-				targetSelector.addUnconnectedClient(client);
-			}
-
-			// Purge old entries from ipMap
 			synchronized(lastConnectTime)
 			{
 				iter = lastConnectTime.entrySet().iterator();
@@ -201,6 +220,11 @@ class HashDistributionAlgorithm
 					}
 				}
 			}
+
+			// Pause for a reasonable amount of time before doing it
+			// again.
+			try { Thread.sleep(sleepTime); }
+				catch (InterruptedException e) {}
 		}
 	}
 

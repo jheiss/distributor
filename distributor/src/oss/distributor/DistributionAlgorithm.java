@@ -41,7 +41,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.net.InetSocketAddress;
 
-public abstract class DistributionAlgorithm
+public abstract class DistributionAlgorithm implements Runnable
 {
 	Distributor distributor;
 	Logger logger;
@@ -52,7 +52,11 @@ public abstract class DistributionAlgorithm
 	// in a different package, for use in proccessNewClients().
 	protected List newClients;
 	Map pendingConnections;
+	List completedConnections;
 	List failedConnections;
+	TimedOutConnectionDetector timedOutDetector;
+	Thread thread;
+	int selectFailureOrZeroCount = 0;
 
 	public DistributionAlgorithm(Distributor distributor)
 	{
@@ -67,6 +71,7 @@ public abstract class DistributionAlgorithm
 
 		newClients = new LinkedList();
 		pendingConnections = new HashMap();
+		completedConnections = new LinkedList();
 		failedConnections = new LinkedList();
 
 		try
@@ -78,6 +83,8 @@ public abstract class DistributionAlgorithm
 			logger.severe("Error creating selector: " + e.getMessage());
 			System.exit(1);
 		}
+
+		thread = new Thread(this, getClass().getName());
 	}
 
 	/*
@@ -89,10 +96,9 @@ public abstract class DistributionAlgorithm
 	{
 		connectionTimeout = distributor.getConnectionTimeout();
 		targetSelector = distributor.getTargetSelector();
-		startThread();
+		timedOutDetector = new TimedOutConnectionDetector();
+		thread.start();
 	}
-
-	public abstract void startThread();
 
 	/*
 	 * TargetSelector uses this method to give us a client.
@@ -111,17 +117,23 @@ public abstract class DistributionAlgorithm
 	}
 
 	/*
-	 * Child classes must use this method to process the newClients queue.
-	 * They should call this method in their run() method.
+	 * Child classes must implement this method to process the
+	 * newClients queue.  Implementations should empty the queue as they
+	 * process it, i.e. via iter.remove().
+	 *
+	 * Should return true if it did something (i.e. the queue wasn't
+	 * empty).
 	 */
-	protected abstract void processNewClients();
+	protected abstract boolean processNewClients();
 
 	/*
 	 * Once an algorithm has picked a possible Target for a client, it
 	 * uses this method to initiate a connection to that target.
 	 *
 	 * This method will generally be called from within
-	 * processNewClients().
+	 * processNewClients(); and possibly from within
+	 * processFailedConnections(), depending on the distribution
+	 * algorithm.
 	 */
 	public void initiateConnection(SocketChannel client, Target target)
 	{
@@ -173,150 +185,146 @@ public abstract class DistributionAlgorithm
 	}
 
 	/*
-	 * Deal with any connections which have completed, and return a list
-	 * of those that have.
-	 *
-	 * Child classes should call this method from within their run() method.
+	 * Select for connections which have completed, and call
+	 * processFinishedConnections() with a list of those that have.
 	 */
-	public List checkForCompletedConnections()
+	public void run()
 	{
-		int r;
+		boolean pncReturn;
+		int selectReturn;
 		Iterator keyIter;
 		SelectionKey key;
 		SocketChannel client;
 		SocketChannel server;
 		PendingConnectionState connState;
-		List completed = new LinkedList();
 
-		// Select for a limited amount of time so that users of this
-		// method also get a chance to detect failed and timed out
-		// connections.  (The run methods in individual various children
-		// of this class generally loop calling this method followed by
-		// the checkForFailedConnections() method.)
-		r = 0;
-		try
+		WHILETRUE: while (true)
 		{
-			r = selector.select(connectionTimeout/2);
-		}
-		catch (IOException e)
-		{
-			// The only exceptions thrown by select seem to be the
-			// occasional (fairly rare) "Interrupted system call"
-			// which, from what I can tell, is safe to ignore.
-			logger.warning(
-				"Error when selecting for ready channel: " +
-				e.getMessage());
-			return completed;
-		}
+			pncReturn = processNewClients();
 
-		logger.finest(
-			"select reports " + r + " channels ready to connect");
+			// Reset the failure counter if processNewClients() did
+			// something, as that would explain why select would return
+			// with zero ready channels.
+			if (pncReturn)
+			{
+				selectFailureOrZeroCount = 0;
+			}
 
-		// Work through the list of channels that are ready
-		keyIter = selector.selectedKeys().iterator();
-		while (keyIter.hasNext())
-		{
-			key = (SelectionKey) keyIter.next();
-			keyIter.remove();
+			// If we exceed the threshold of failed selects, pause
+			// for a bit so we don't go into a tight loop
+			if (selectFailureOrZeroCount >= 10)
+			{
+				logger.warning(
+					"select appears to be failing repeatedly, pausing");
+				try { Thread.sleep(500); }
+					catch (InterruptedException e) {}
+				selectFailureOrZeroCount = 0;
+			}
 
-			server = (SocketChannel) key.channel();
-			client = (SocketChannel) key.attachment();
-
+			selectReturn = 0;
 			try
 			{
-				server.finishConnect();
-				logger.fine(
-					"Connection from " + client +
-					" to " + server + " complete");
-				synchronized(pendingConnections)
+				selectReturn = selector.select();
+
+				if (selectReturn > 0)
 				{
-					connState =
-						(PendingConnectionState)
-						pendingConnections.get(client);
-					completed.add(
-						new Connection(
-							client, server, connState.getTarget()));
-					pendingConnections.remove(client);
+					selectFailureOrZeroCount = 0;
 				}
-				key.cancel();
+				else
+				{
+					selectFailureOrZeroCount++;
+				}
 			}
 			catch (IOException e)
 			{
-				logger.warning("Error finishing connection");
-				key.cancel();
+				// The only exceptions thrown by select seem to be the
+				// occasional (fairly rare) "Interrupted system call"
+				// which, from what I can tell, is safe to ignore.
+				logger.warning(
+					"Error when selecting for ready channel: " +
+					e.getMessage());
+				selectFailureOrZeroCount++;
+				continue WHILETRUE;
+			}
+
+			logger.finest(
+				"select reports " + selectReturn +
+				" channels ready to connect");
+
+			// Work through the list of channels that are ready
+			keyIter = selector.selectedKeys().iterator();
+			while (keyIter.hasNext())
+			{
+				key = (SelectionKey) keyIter.next();
+				keyIter.remove();
+
+				server = (SocketChannel) key.channel();
+				client = (SocketChannel) key.attachment();
+
 				try
 				{
-					server.close();
+					server.finishConnect();
+					logger.fine(
+						"Connection from " + client +
+						" to " + server + " complete");
+					synchronized(pendingConnections)
+					{
+						connState =
+							(PendingConnectionState)
+							pendingConnections.get(client);
+						completedConnections.add(
+							new Connection(
+								client, server, connState.getTarget()));
+						pendingConnections.remove(client);
+					}
+					key.cancel();
 				}
-				catch (IOException ioe)
+				catch (IOException e)
 				{
-					logger.warning(
-						"Error closing channel: " + ioe.getMessage());
-				}
+					logger.warning("Error finishing connection");
+					key.cancel();
+					try
+					{
+						server.close();
+					}
+					catch (IOException ioe)
+					{
+						logger.warning(
+							"Error closing channel: " + ioe.getMessage());
+					}
 
-				synchronized(pendingConnections)
-				{
-					pendingConnections.remove(client);
-				}
-				synchronized(failedConnections)
-				{
-					failedConnections.add(client);
-				}
-			}
-		}
-
-		return completed;
-	}
-
-	/*
-	 * Return a list of connections which have timed out or otherwise
-	 * failed.
-	 *
-	 * Child classes should call this method from within their run() method.
-	 */
-	public List checkForFailedConnections()
-	{
-		// Add connections which have timed out to the list of
-		// connections that have failed for other reasons.
-		synchronized(pendingConnections)
-		{
-			Entry pendingEntry;
-			SocketChannel client;
-			PendingConnectionState connState;
-
-			Iterator iter = pendingConnections.entrySet().iterator();
-			while(iter.hasNext())
-			{
-				pendingEntry = (Entry) iter.next();
-				client = (SocketChannel) pendingEntry.getKey();
-				connState = (PendingConnectionState) pendingEntry.getValue();
-
-				if (connState.getStartTime() + connectionTimeout <
-					System.currentTimeMillis())
-				{
-					logger.finer(
-						"Pending connection from " + client +
-						" to " + connState.getTarget() + " timed out");
-
-					connState.getServerKey().cancel();
-					iter.remove();
-
-					// Add this client to the failed list
+					synchronized(pendingConnections)
+					{
+						pendingConnections.remove(client);
+					}
 					synchronized(failedConnections)
 					{
 						failedConnections.add(client);
 					}
 				}
 			}
-		}
 
-		// To be consistent with checkForCompletedConnections(), return
-		// a list that the caller doesn't have to worry about
-		// synchronizing or emptying when done.
-		List returnList = failedConnections;
-		failedConnections = new LinkedList();
-		return returnList;
+			processCompletedConnections(completedConnections);
+		}
 	}
+
+	/*
+	 * Implementations should process the list of completed connections,
+	 * generally by dumping any state they might have for that
+	 * connection and then call targetSelector.addFinishedClient(conn).
+	 * The list should be emptied as it is processed, i.e. via
+	 * iter.remove().
+	 */
+	public abstract void processCompletedConnections(List completedConnections);
+
+	/*
+	 * Implementations should process the list of failed connections,
+	 * either by trying another target if that is appropriate or call
+	 * targetSelector.addUnconnectedClient(client).
+	 * The list should be emptied as it is processed, i.e. via
+	 * iter.remove().
+	 */
+	public abstract void processFailedConnections(List failedConnections);
 
 	/*
 	 * Provide a default no-op implementation for this method since
@@ -372,11 +380,80 @@ public abstract class DistributionAlgorithm
 		stats += indent +
 			pendingConnections.size() + " entries in pendingConnections Map\n";
 		stats += indent +
+			completedConnections.size() +
+			" entries in completedConnections List\n";
+		stats += indent +
 			failedConnections.size() + " entries in failedConnections List\n";
 		stats += indent +
 			selector.keys().size() + " entries in selector key Set";
 
 		return stats;
+	}
+
+	/*
+	 * Look for connections which have timed out, add them to the list
+	 * of connections which have failed for other reasons, and call
+	 * processFailedConnections() with that list.
+	 */
+	class TimedOutConnectionDetector implements Runnable
+	{
+		Thread thread;
+
+		TimedOutConnectionDetector()
+		{
+			thread = new Thread(this, getClass().getName());
+			thread.start();
+		}
+
+		public void run()
+		{
+			Iterator iter;
+			Entry pendingEntry;
+			SocketChannel client;
+			PendingConnectionState connState;
+
+			while (true)
+			{
+				// Add connections which have timed out to the list of
+				// connections that have failed for other reasons.
+				synchronized(pendingConnections)
+				{
+					iter = pendingConnections.entrySet().iterator();
+					while(iter.hasNext())
+					{
+						pendingEntry = (Entry) iter.next();
+						client = (SocketChannel) pendingEntry.getKey();
+						connState =
+							(PendingConnectionState) pendingEntry.getValue();
+
+						if (connState.getStartTime() + connectionTimeout <
+							System.currentTimeMillis())
+						{
+							logger.finer(
+								"Pending connection from " + client +
+								" to " + connState.getTarget() + " timed out");
+
+							connState.getServerKey().cancel();
+							iter.remove();
+
+							// Add this client to the failed list
+							synchronized(failedConnections)
+							{
+								failedConnections.add(client);
+							}
+						}
+					}
+				}
+
+				// And get that list processed
+				processFailedConnections(failedConnections);
+
+				// Pause a reasonable amount of time before doing it
+				// again
+				try { Thread.sleep(connectionTimeout/2); }
+					catch (InterruptedException e) {}
+			}
+		}
 	}
 }
 
