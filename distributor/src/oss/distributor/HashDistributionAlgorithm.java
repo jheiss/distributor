@@ -51,22 +51,40 @@ class HashDistributionAlgorithm
 	 * Because the distribution algorithms are instantiated via
 	 * Class.forName(), they must have public constructors.
 	 */
-	/*
-	 * hashTimeout defines how long we keep a record of the last target
-	 * a given client was sent too.  Set it too long and you'll use a
-	 * lot of memory on a busy server.  But it needs to be long enough
-	 * that client sessions get sent to the right server.  The right
-	 * value is highly dependant on your environment.  Reasonable values
-	 * probably range anywhere from one hour to a couple of days.
-	 */
 	public HashDistributionAlgorithm(
 		Distributor distributor, Element configElement)
 	{
 		super(distributor);
 
-		// ***  Need to read this from configElement
-		//this.hashTimeout = hashTimeout;
-		this.hashTimeout = 1800000;
+		/*
+		 * hashTimeout defines how long we keep a record of the last
+		 * target a given client was sent too.  Set it too long and
+		 * you'll use a lot of memory on a busy server.  But it needs to
+		 * be long enough that client sessions get sent to the right
+		 * server.  The right value is highly dependant on your
+		 * environment.  Reasonable values probably range anywhere from
+		 * one hour to a couple of days.
+	 	 */
+		hashTimeout = 1800000;
+		if (configElement.getAttribute("hash_timeout").equals(""))
+		{
+			logger.warning("No hash timeout specified, using default");
+		}
+		else
+		{
+			try
+			{
+				hashTimeout =
+					Integer.parseInt(
+						configElement.getAttribute("hash_timeout"));
+			}
+			catch (NumberFormatException e)
+			{
+				logger.warning("Invalid hash timeout, using default:  " +
+					e.getMessage());
+			}
+		}
+		logger.config("Hash timeout:  " + hashTimeout);
 
 		ipMap = new HashMap();
 		lastConnectTime = new HashMap();
