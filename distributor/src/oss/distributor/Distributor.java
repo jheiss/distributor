@@ -83,6 +83,7 @@ public class Distributor
 	List targetGroups;
 	Logger logger;
 	Object serviceTest;
+	Controller controller;
 	public Distributor(String args[])
 	{
 		//
@@ -124,6 +125,7 @@ public class Distributor
 		//
 		// Read the configuration file
 		//
+		int controlPort = 0;
 
 		if (args.length < 1) { usage(); }
 
@@ -246,6 +248,19 @@ public class Distributor
 					rootElement.getAttribute("connection_timeout"));
 			}
 			logger.fine("Connection timeout:  " + connectionTimeout);
+
+			if (rootElement.getAttribute("control_port").equals(""))
+			{
+				logger.warning(
+					"No control port defined, no control server will " +
+					"be started");
+			}
+			else
+			{
+				controlPort = Integer.parseInt(
+					rootElement.getAttribute("control_port"));
+			}
+			logger.fine("Control port:  " + controlPort);
 
 			//
 			// Find the "target_group" nodes in the XML document
@@ -458,7 +473,10 @@ public class Distributor
 		// otherwise it will potentially grow quite large
 		hashAlgorithmMap = new HashMap();
 
-		Controller controller = new Controller(this);
+		if (controlPort != 0)
+		{
+			controller = new Controller(this, controlPort);
+		}
 	}
 
 	protected Logger getLogger()

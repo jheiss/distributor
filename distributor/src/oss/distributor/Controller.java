@@ -40,14 +40,16 @@ public class Controller implements Runnable
 {
 	Distributor distributor;
 	Logger logger;
+	int port;
 	List conns;
 	Thread thread;
 	ServerSocket controllerServer;
 
-	public Controller(Distributor distributor)
+	public Controller(Distributor distributor, int port)
 	{
 		this.distributor = distributor;
 		logger = distributor.getLogger();
+		this.port = port;
 
 		// Use a linked list so we can remove dead connections in the
 		// middle of the list easily.
@@ -63,7 +65,7 @@ public class Controller implements Runnable
 		try
 		{
 			controllerServer = new ServerSocket();
-			controllerServer.bind(new InetSocketAddress("127.0.0.1", 3456));
+			controllerServer.bind(new InetSocketAddress("127.0.0.1", port));
 		}
 		catch (IOException e)
 		{
