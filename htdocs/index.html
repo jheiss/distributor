@@ -59,8 +59,8 @@ an HTTP service test will be next.
 <H2>Client Disconnection</H2>
 
 <P>
-One possible failure mode discussed earlier is a server that accepts a TCP
-connection but then never trasmits data or disconnects.  This could leave
+One possible failure mode mentioned earlier is a server that accepts a TCP
+connection but then never transmits data or disconnects.  This could leave
 clients stuck in a bad situation.  In some cases you may wish that the load
 balancer would terminate all of the connections to a server when it detects
 that the server is not serving valid data.  This might allow the clients to
@@ -113,6 +113,17 @@ the client to the same server it was connected to previously.  If that server
 is down, or if the client hasn't connected before, distributor falls back to
 the round robin algorithm.
 </P>
+
+<H2>"Competition"</H2>
+
+<P>
+Similar Open Source software:
+</P>
+
+<UL>
+<LI><A HREF="http://balance.sourceforge.net/">balance</A></LI>
+<LI><A HREF="http://siag.nu/pen/">pen</A></LI>
+</UL>
 
 <a href="http://sourceforge.net"><img
 src="http://sourceforge.net/sflogo.php?group_id=28825&type=2"
