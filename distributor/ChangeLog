@@ -1,3 +1,26 @@
+0.6.5:
+    Added a half_close configuration option to allow the TCP
+      half close support to be turned off.  The default
+      continues to be for half close support to be enabled.  If
+	  half_close is set to "no" then an EOF (end of file) from
+	  either the client or server will result in the whole
+      connection being closed.  This turns out to be necessary
+      for LDAP in some situations, and may be necessary for
+      others.
+
+    Fixed things so that a target address can be specified as an
+      IPv6 address.  Tested distributor to ensure it is capable
+	  of handling targets specified as hostnames that resolve
+	  only to IPv6 addresses, as well as targets specified
+      directly as IPv6 addresses.
+
+    Added a new thread (DelayedMover) associated with each
+	  target.  This new thread handles any data that can't be
+	  immediately written to the appropriate destination by
+	  DataMover (the thread which passes data back and forth for
+	  established connections).  Previously DataMover would just
+	  wait until it could write the data, which meant it could
+      be hung indefinately by an unresponsive destination.
 0.6.1:
     Fix for handling clients that we can't find a valid target
       for.
