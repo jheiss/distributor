@@ -133,6 +133,11 @@ class Controller implements Runnable
 			}
 		}
 	}
+
+	protected String getMemoryStats(String indent)
+	{
+		return indent + conns.size() + " entries in conns List";
+	}
 }
 
 class ControllerConnection implements Runnable
@@ -208,6 +213,10 @@ class ControllerConnection implements Runnable
 				{
 					stats(st);
 				}
+				else if (command.equals("memstats"))
+				{
+					memstats(st);
+				}
 				else if (command.equals("threads"))
 				{
 					threads(st);
@@ -270,6 +279,7 @@ class ControllerConnection implements Runnable
 	{
 		out.println("Commands:");
 		out.println("stats");
+		out.println("memstats");
 		out.println("threads");
 		out.println("add");
 		out.println("remove");
@@ -284,24 +294,7 @@ class ControllerConnection implements Runnable
 
 	protected void stats(StringTokenizer st)
 	{
-		// Display each distribution algorithm, which will show the
-		// number of pending connections being handled by each.
-		out.println("Distribution algorithms:");
-		List distributionAlgorithms =
-			distributor.getDistributionAlgorithms();
-		synchronized (distributionAlgorithms)
-		{
-			Iterator iter = distributionAlgorithms.iterator();
-			while (iter.hasNext())
-			{
-				DistributionAlgorithm algo =
-					(DistributionAlgorithm) iter.next();
-				out.println("  " + algo);
-			}
-		}
-
-		// Display all of the targets, which will show the number of
-		// established connections to each.
+		// Display the statistics for each of the targets
 		List targetGroups = distributor.getTargetGroups();
 		synchronized (targetGroups)
 		{
@@ -310,13 +303,13 @@ class ControllerConnection implements Runnable
 			Iterator targetIter;
 
 			int tgCounter = 0;
-			Iterator tgIter = targetGroups.iterator();
-			while (tgIter.hasNext())
+			Iterator iter = targetGroups.iterator();
+			while (iter.hasNext())
 			{
 				out.println("Target group " + tgCounter + ":");
 				tgCounter++;
 
-				targets = (List) tgIter.next();
+				targets = (List) iter.next();
 				synchronized (targets)
 				{
 					targetIter = targets.iterator();
@@ -324,6 +317,69 @@ class ControllerConnection implements Runnable
 					{
 						target = (Target) targetIter.next();
 						out.println("  " + target);
+						out.println(target.getStats("    "));
+					}
+				}
+			}
+		}
+	}
+
+	protected void memstats(StringTokenizer st)
+	{
+		Iterator iter;
+
+		// Display the memory statistics for Controller
+		out.println(distributor.getController() + ":");
+		out.println(distributor.getController().getMemoryStats(""));
+		out.println("");
+
+		// Display the memory statistics for TargetSelector
+		out.println(distributor.getTargetSelector() + ":");
+		out.println(distributor.getTargetSelector().getMemoryStats(""));
+		out.println("");
+
+		// Display the memory statistics for each of the
+		// distribution algorithms
+		List distAlgos = distributor.getDistributionAlgorithms();
+		synchronized (distAlgos)
+		{
+			DistributionAlgorithm algo;
+
+			iter = distAlgos.iterator();
+			while(iter.hasNext())
+			{
+				algo = (DistributionAlgorithm) iter.next();
+				out.println(algo);
+				out.println(algo.getMemoryStats("  "));
+			}
+		}
+		out.println("");
+		
+
+		// Display the memory statistics for each of the targets
+		List targetGroups = distributor.getTargetGroups();
+		synchronized (targetGroups)
+		{
+			List targets;
+			Target target;
+			Iterator targetIter;
+
+			int tgCounter = 0;
+			iter = targetGroups.iterator();
+			while (iter.hasNext())
+			{
+				out.println("Target group " + tgCounter + ":");
+				tgCounter++;
+
+				targets = (List) iter.next();
+				synchronized (targets)
+				{
+					targetIter = targets.iterator();
+					while (targetIter.hasNext())
+					{
+						target = (Target) targetIter.next();
+						out.println("  " + target);
+						out.println(target.getMemoryStats("    "));
 					}
 				}
 			}
@@ -387,13 +443,13 @@ class ControllerConnection implements Runnable
 				return;
 			}
 
-			Iterator tgIter = targetGroups.iterator();
+			Iterator iter = targetGroups.iterator();
 			int tgCounter = 0;
-			while (tgIter.hasNext())
+			while (iter.hasNext())
 			{
 				if (tgCounter == tgIndex)
 				{
-					List targets = (List) tgIter.next();
+					List targets = (List) iter.next();
 					targets.add(newTarget);
 					out.println("New target added");
 					break;
@@ -443,13 +499,13 @@ class ControllerConnection implements Runnable
 				return;
 			}
 
-			Iterator tgIter = targetGroups.iterator();
+			Iterator iter = targetGroups.iterator();
 			int tgCounter = 0;
-			while (tgIter.hasNext())
+			while (iter.hasNext())
 			{
 				if (tgCounter == tgIndex)
 				{
-					targets = (List) tgIter.next();
+					targets = (List) iter.next();
 					break;
 				}
 				tgCounter++;
@@ -606,13 +662,13 @@ class ControllerConnection implements Runnable
 				return;
 			}
 
-			Iterator tgIter = targetGroups.iterator();
+			Iterator iter = targetGroups.iterator();
 			int tgCounter = 0;
-			while (tgIter.hasNext())
+			while (iter.hasNext())
 			{
 				if (tgCounter == tgIndex)
 				{
-					targets = (List) tgIter.next();
+					targets = (List) iter.next();
 					break;
 				}
 				tgCounter++;
@@ -682,13 +738,13 @@ class ControllerConnection implements Runnable
 				return;
 			}
 
-			Iterator tgIter = targetGroups.iterator();
+			Iterator iter = targetGroups.iterator();
 			int tgCounter = 0;
-			while (tgIter.hasNext())
+			while (iter.hasNext())
 			{
 				if (tgCounter == tgIndex)
 				{
-					targets = (List) tgIter.next();
+					targets = (List) iter.next();
 					break;
 				}
 				tgCounter++;
@@ -765,7 +821,7 @@ class ControllerConnection implements Runnable
 
 	public String toString()
 	{
-		return("ControllerConnection from " + socket);
+		return "ControllerConnection from " + socket;
 	}
 }
 
