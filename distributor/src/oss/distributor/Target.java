@@ -35,6 +35,10 @@ import java.util.LinkedList;
 import java.util.Iterator;
 import java.util.logging.Logger;
 
+/*
+ * This class is public to allow 3rd party distribution algorithms and
+ * service tests.
+ */
 public class Target implements Runnable
 {
 	Distributor distributor;
@@ -46,16 +50,24 @@ public class Target implements Runnable
 	Logger logger;
 	DataMover dataMover;
 	Thread thread;
+	// Number of consecutive failures to connect to this target
+	int failureCount;
+	// How many consecutive connection failures are allowed before this
+	// target is disabled
+	int failureCountLimit;
 
-	public Target(Distributor distributor,
-		InetAddress addr, int port, boolean terminateOnDisable)
+	protected Target(Distributor distributor,
+		InetAddress addr, int port,
+		int failureCountLimit, boolean terminateOnDisable)
 	{
 		this.distributor = distributor;
 		this.addr = addr;
 		this.port = port;
+		this.failureCountLimit = failureCountLimit;
 		this.terminateOnDisable = terminateOnDisable;
 
 		enabled = true;
+		failureCount = 0;
 
 		// Use a linked list to speed up removing dead connections from
 		// the middle of the list.
@@ -65,7 +77,7 @@ public class Target implements Runnable
 
 		dataMover = new DataMover(distributor);
 
-		thread = new Thread(this);
+		thread = new Thread(this, getClass().getName());
 		thread.start();
 	}
 
@@ -79,7 +91,7 @@ public class Target implements Runnable
 		return port;
 	}
 
-	public void addConnection(Connection conn)
+	protected void addConnection(Connection conn)
 	{
 		synchronized (connections)
 		{
@@ -88,26 +100,45 @@ public class Target implements Runnable
 		dataMover.addConnection(conn);
 	}
 
-	public void enable()
+	public synchronized void enable()
 	{
 		enabled = true;
+		failureCount = 0;
 	}
 
-	public void disable()
+	public synchronized void disable()
 	{
-		enabled = false;
-		if (terminateOnDisable)
+		if (enabled == true)  // Don't do anything if already disabled
 		{
-			terminateAll();
+			enabled = false;
+			if (terminateOnDisable)
+			{
+				terminateAll();
+			}
 		}
 	}
 
-	public boolean isEnabled()
+	public synchronized boolean isEnabled()
 	{
 		return enabled;
 	}
 
-	public void terminateAll()
+	public synchronized int incrementFailureCount()
+	{
+		failureCount++;
+		if (failureCount > failureCountLimit)
+		{
+			disable();
+		}
+		return failureCount;
+	}
+
+	public synchronized void resetFailureCount()
+	{
+		failureCount = 0;
+	}
+
+	protected void terminateAll()
 	{
 		synchronized (connections)
 		{
@@ -123,7 +154,8 @@ public class Target implements Runnable
 	}
 
 	/*
-	 * Remove connections which have terminated
+	 * Remove connections which have terminated.
+	 * Frees up memory and keeps our connection count accurate.
 	 */
 	public void run()
 	{
@@ -152,7 +184,10 @@ public class Target implements Runnable
 
 	public int numberOfConnections()
 	{
-		return connections.size();
+		synchronized (connections)
+		{
+			return connections.size();
+		}
 	}
 
 	public String toString()
