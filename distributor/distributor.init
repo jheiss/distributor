@@ -7,6 +7,11 @@ JAVA="/usr/java/j2sdk1.4.1_02/bin/java"
 VER="0.5.5"
 DISTRIBUTOR="$JAVA -jar /usr/local/lib/distributor-$VER.jar"
 
+# On Linux and Solaris you probably want to uncomment this to increase
+# the maximum file handle limit for this shell and its children (which
+# will include Distributor).  See INSTALL for more information.
+#ulimit -n 4096
+
 case "$1" in
 	start)
 		nohup $DISTRIBUTOR /usr/local/etc/distributor.conf > /dev/null &

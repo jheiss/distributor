@@ -14,6 +14,31 @@ Presuming you want to install into /usr/local:
   You can just get the JRE if all you want to do is run Distributor.  If
   you want the compiler, etc. get the SDK.
 
+Resource limits
+---------------
+
+If you expect a large number of connections to your load balancer, you
+might need to worry about increasing resource limits on your load
+balancer.
+
+Linux:
+The number of file handles is limited to 4096 system-wide and 1024
+per process by default.  See http://www.kegel.com/dkftpbench/#tuning
+See the comments in the sample distributor.init for an example of
+raising the per-process limit.
+
+Solaris:
+Solaris does not appear to have a system-wide limit, only a per-process
+limit.  According to Sun[1], the hard limit is 256 for a 32-bit program
+and 2 billion for a 64-bit program.  So you really want to make sure you
+get the 64-bit version of the JVM (it's a seperate download that adds on
+to the 32-bit version).  Even with a larger hard limit, the soft limit
+still defaults to 256, so you need to raise that with ulimit before
+starting Distributor.  See the comments in the sample distributor.init
+for an example.
+
+[1]  http://docs.sun.com/db/doc/806-7009/6jftnqsiv?a=view
+
 Run
 ---
 
