@@ -268,7 +268,8 @@ class HashDistributionAlgorithm
 							{
 								ipMap.remove(addr);
 							}
-							lastConnectTime.remove(addr);
+							// Remove the entry from lastConnectTime
+							iter.remove();
 						}
 					}
 				}
