@@ -38,14 +38,6 @@ public class Connection
 	SocketChannel server;
 	// The Target that 'server' is a connection to
 	Target target;
-	// DataMover passes the selection keys for the two channels to us
-	// once it has registered the channels with its Selector.  That way
-	// we can cancel the keys if we are asked to terminate the
-	// connection.  Otherwise the keys get activated and DataMover has
-	// to deal with an IOException in order to realize that the
-	// connection has been closed, which is messy.
-	SelectionKey clientSelectionKey;
-	SelectionKey serverSelectionKey;
 	boolean terminated;
 
 	public Connection(
@@ -54,8 +46,6 @@ public class Connection
 		this.client = client;
 		this.server = server;
 		this.target = target;
-		this.clientSelectionKey = null;
-		this.serverSelectionKey = null;
 
 		terminated = false;
 	}
@@ -75,33 +65,11 @@ public class Connection
 		return target;
 	}
 
-	protected void setClientSelectionKey(SelectionKey key)
-	{
-		clientSelectionKey = key;
-	}
-
-	protected void setServerSelectionKey(SelectionKey key)
-	{
-		serverSelectionKey = key;
-	}
-
 	public void terminate()
 	{
-		try
-		{
-			client.close();
-			server.close();
-		}
-		catch (IOException e) {}
-
-		if (clientSelectionKey != null)
-		{
-			clientSelectionKey.cancel();
-		}
-		if (serverSelectionKey != null)
-		{
-			serverSelectionKey.cancel();
-		}
+		// Let DataMover do the closing so that it can clean up the
+		// infomation it stores about the connection
+		target.getDataMover().closeConnection(client, server);
 
 		terminated = true;
 	}
