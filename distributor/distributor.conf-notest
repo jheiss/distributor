@@ -1,0 +1,22 @@
+<!-- This is a example, basic file which does no service testing -->
+
+<distributor
+	port="22"
+	algorithm="roundrobin"
+	connection_timeout="2000"
+	service_type="none">
+
+	<target_group order="0">
+		<target hostname="server1.example.com" port="22"/>
+		<target hostname="server2.example.com" port="22"/>
+	</target_group>
+
+	<log type="console" level="all"/>
+	<log type="file" filename="distributor.log" level="info"/>
+
+	<!-- These can be ignored unless you're adding a new service type -->
+	<type_mapping service_type="ldap" class="oss.distributor.LDAPServiceTest"/>
+	<type_mapping service_type="http" class="oss.distributor.HTTPServiceTest"/>
+	<type_mapping service_type="script" class="oss.distributor.ScriptServiceTest"/>
+</distributor>
+

@@ -1,0 +1,31 @@
+<!-- This is a example, basic file for use with LDAP servers -->
+
+<distributor
+	port="389"
+	algorithm="roundrobin"
+	connection_timeout="2000"
+	service_type="ldap">
+
+	<target_group order="0">
+		<target hostname="ldap1.example.com" port="389"/>
+		<target hostname="ldap2.example.com" port="389"/>
+	</target_group>
+
+	<log type="console" level="all"/>
+	<log type="file" filename="distributor.log" level="info"/>
+
+	<test_parameters
+		service_type="ldap"
+		frequency="60000"
+		timeout="5000"
+		<query dn="uid=jheiss,ou=people,dc=example,dc=com">
+			<required_attribute name="objectClass"/>
+		</query>
+	</test_parameters>
+
+	<!-- These can be ignored unless you're adding a new service type -->
+	<type_mapping service_type="ldap" class="oss.distributor.LDAPServiceTest"/>
+	<type_mapping service_type="http" class="oss.distributor.HTTPServiceTest"/>
+	<type_mapping service_type="script" class="oss.distributor.ScriptServiceTest"/>
+</distributor>
+
