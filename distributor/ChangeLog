@@ -1,5 +1,10 @@
+0.6.1:
+    Fix for handling clients that we can't find a valid target
+      for.
+    Added conns function to Controller which prints all of the
+      connections that Distributor is currently handling.
 0.6:
-	Rewrote round robin algorithm.  The previous version was
+    Rewrote round robin algorithm.  The previous version was
       a quick hack.  It worked fairly well under normal
       conditions (all targets enabled, etc.) but fell apart
       otherwise.  This version should be a bit more robust.
