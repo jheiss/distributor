@@ -134,6 +134,12 @@ public class ScriptServiceTest implements Runnable
 						else
 						{
 							result = false;
+
+							if (scriptTest.getResult() ==
+								BackgroundTest.RESULT_NOTFINISHED)
+							{
+								logger.warning("Test timed out");
+							}
 						}
 
 						if (result && ! target.isEnabled())

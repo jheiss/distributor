@@ -228,6 +228,12 @@ public class HTTPServiceTest implements Runnable
 						else
 						{
 							result = false;
+
+							if (httpTest.getResult() ==
+								BackgroundTest.RESULT_NOTFINISHED)
+							{
+								logger.warning("Test timed out");
+							}
 						}
 
 						if (result && ! target.isEnabled())
