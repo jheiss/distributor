@@ -150,13 +150,18 @@ public class Target implements Runnable
 		}
 	}
 
+	public int numberOfConnections()
+	{
+		return connections.size();
+	}
+
 	public String toString()
 	{
 		String string = "Target: " + addr + ":" + port;
 			
 		if (enabled)
 		{
-			string += " with " + connections.size() + " connections";
+			string += " with " + numberOfConnections() + " connections";
 		}
 		else
 		{
