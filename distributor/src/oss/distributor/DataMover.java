@@ -47,6 +47,8 @@ class DataMover implements Runnable
 	List distributionAlgorithms;
 	Map clients;
 	Map servers;
+	long clientToServerByteCount;
+	long serverToClientByteCount;
 	Thread thread;
 
 	protected DataMover(Distributor distributor)
@@ -67,6 +69,9 @@ class DataMover implements Runnable
 
 		clients = new HashMap();
 		servers = new HashMap();
+
+		clientToServerByteCount = 0;
+		serverToClientByteCount = 0;
 
 		// Create a thread for ourselves and start it
 		thread = new Thread(this, getClass().getName());
@@ -228,6 +233,15 @@ class DataMover implements Runnable
 						{
 							readMore = true;
 
+							if (clientToServer)
+							{
+								clientToServerByteCount += r;
+							}
+							else
+							{
+								serverToClientByteCount += r;
+							}
+
 							buffer.flip();
 
 							// Give each of the distribution algorithms a
@@ -362,6 +376,16 @@ class DataMover implements Runnable
 				}
 			}
 		}
+	}
+
+	public long getClientToServerByteCount()
+	{
+		return clientToServerByteCount;
+	}
+
+	public long getServerToClientByteCount()
+	{
+		return serverToClientByteCount;
 	}
 }
 

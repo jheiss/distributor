@@ -198,18 +198,23 @@ public class Target implements Runnable
 
 	public String toString()
 	{
-		String string = "Target: " + addr + ":" + port;
+		String string = "Target: " + addr + ":" + port + "\n";
 			
 		if (enabled)
 		{
-			string += ", " + numberOfConnections() + " current connections";
+			string += "    " + numberOfConnections() +
+				" current connections\n";
 		}
 		else
 		{
-			string += " DISABLED";
+			string += "    DISABLED\n";
 		}
 
-		string += ", " + totalConnectionCount + " total";
+		string += "    " + totalConnectionCount + " total connections\n";
+		string += "    " + dataMover.getClientToServerByteCount() +
+			" client to server bytes\n";
+		string += "    " + dataMover.getServerToClientByteCount() +
+			" server to client bytes";
 
 		return string;
 	}
