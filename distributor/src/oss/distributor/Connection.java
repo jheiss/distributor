@@ -121,7 +121,7 @@ public class Connection
 
 	public String toString()
 	{
-		return("Connection from " + client + " to " + server);
+		return "Connection from " + client + " to " + server;
 	}
 }
 
