@@ -553,8 +553,13 @@ public class Distributor
 		}
 		catch (InvocationTargetException e)
 		{
+			// Print the message from the exception thrown by the
+			// constructor, not the message in the
+			// InvocationTargetException (which is generally null in my
+			// experience).
 			logger.severe(
-				"Class constructor threw exception:  " + e.getMessage());
+				"Class constructor threw exception:  " +
+				e.getCause().getMessage());
 			System.exit(1);
 		}
 
