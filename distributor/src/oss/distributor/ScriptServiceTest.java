@@ -34,7 +34,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-public class ScriptServiceTest implements Runnable
+class ScriptServiceTest implements Runnable
 {
 	Distributor distributor;
 	Logger logger;
@@ -47,6 +47,10 @@ public class ScriptServiceTest implements Runnable
 
 	Thread thread;
 
+	/*
+	 * Because the service tests are instantiated via Class.forName(),
+	 * they must have public constructors.
+	 */
 	public ScriptServiceTest(Distributor distributor, Element configElement)
 	{
 		this.distributor = distributor;
@@ -86,7 +90,7 @@ public class ScriptServiceTest implements Runnable
 			System.exit(1);  // ***
 		}
 
-		thread = new Thread(this);
+		thread = new Thread(this, getClass().getName());
 		thread.start();
 	}
 
@@ -173,12 +177,12 @@ public class ScriptServiceTest implements Runnable
 
 	class ScriptBackgroundTest extends BackgroundTest
 	{
-		public ScriptBackgroundTest(Target target)
+		protected ScriptBackgroundTest(Target target)
 		{
 			super(target);
 		}
 
-		void test()
+		public void test()
 		{
 			String server = target.getInetAddress().getHostName();
 			int port = target.getPort();
@@ -219,7 +223,7 @@ public class ScriptServiceTest implements Runnable
 				finished = true;
 				synchronized (this)
 				{
-					notifyAll();
+					notify();
 				}
 			}
 			catch (IOException e)
