@@ -41,6 +41,7 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 import java.util.logging.ConsoleHandler;
 //import java.util.logging.Handler;
+import java.text.ParseException;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.ServerSocketChannel;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -627,6 +628,55 @@ public class Distributor
 		{
 			logger.warning("Error connecting to target: " + e.getMessage());
 			return false;
+		}
+	}
+
+	/*
+	 * Parse log level names into Level constants.
+	 * i.e. take "warning" and return Level.WARNING.
+	 */
+	public static Level parseLogLevel(String levelName)
+		throws ParseException
+	{
+		if (levelName.equals("off"))
+		{
+			return Level.OFF;
+		}
+		else if (levelName.equals("severe"))
+		{
+			return Level.SEVERE;
+		}
+		else if (levelName.equals("warning"))
+		{
+			return Level.WARNING;
+		}
+		else if (levelName.equals("info"))
+		{
+			return Level.INFO;
+		}
+		else if (levelName.equals("config"))
+		{
+			return Level.CONFIG;
+		}
+		else if (levelName.equals("fine"))
+		{
+			return Level.FINE;
+		}
+		else if (levelName.equals("finer"))
+		{
+			return Level.FINER;
+		}
+		else if (levelName.equals("finest"))
+		{
+			return Level.FINEST;
+		}
+		else if (levelName.equals("all"))
+		{
+			return Level.ALL;
+		}
+		else
+		{
+			throw new ParseException("Unrecognized log level", 0);
 		}
 	}
 }
