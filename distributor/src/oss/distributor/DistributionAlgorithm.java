@@ -275,26 +275,33 @@ public abstract class DistributionAlgorithm
 	{
 		// Add connections which have timed out to the list of
 		// connections that have failed for other reasons.
-		Iterator iter = connectStartTime.entrySet().iterator();
-		while(iter.hasNext())
+		synchronized(connectStartTime)
 		{
-			Entry timeEntry = (Entry) iter.next();
-			SocketChannel client = (SocketChannel) timeEntry.getKey();
-			long startTime = ((Long) timeEntry.getValue()).longValue();
+			Entry timeEntry;
+			SocketChannel client;
+			long startTime;
 
-			if (startTime + connectionTimeout < System.currentTimeMillis())
+			Iterator iter = connectStartTime.entrySet().iterator();
+			while(iter.hasNext())
 			{
-				synchronized(connections)
+				timeEntry = (Entry) iter.next();
+				client = (SocketChannel) timeEntry.getKey();
+				startTime = ((Long) timeEntry.getValue()).longValue();
+
+				if (startTime + connectionTimeout <
+					System.currentTimeMillis())
 				{
-					connections.remove(client);
-				}
-				synchronized(connectStartTime)
-				{
+					synchronized(connections)
+					{
+						connections.remove(client);
+					}
+					// Already sychronized on connectStartTime
 					connectStartTime.remove(client);
-				}
-				synchronized(failedConnections)
-				{
-					failedConnections.add(client);
+
+					synchronized(failedConnections)
+					{
+						failedConnections.add(client);
+					}
 				}
 			}
 		}
