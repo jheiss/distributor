@@ -42,7 +42,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-public class LDAPServiceTest implements Runnable
+class LDAPServiceTest implements Runnable
 {
 	Distributor distributor;
 	Logger logger;
@@ -63,10 +63,14 @@ public class LDAPServiceTest implements Runnable
 	Thread thread;
 
 	// SSL types for sslType parameter to constructor
-	public static final int SSL_NONE = 0;
-	public static final int SSL_LDAPS = 1;
-	public static final int SSL_STARTTLS = 2;
+	protected static final int SSL_NONE = 0;
+	protected static final int SSL_LDAPS = 1;
+	protected static final int SSL_STARTTLS = 2;
 
+	/*
+	 * Because the service tests are instantiated via Class.forName(),
+	 * they must have public constructors.
+	 */
 	public LDAPServiceTest(Distributor distributor, Element configElement)
 	{
 		this.distributor = distributor;
@@ -199,7 +203,7 @@ public class LDAPServiceTest implements Runnable
 			j++;
 		}
 
-		thread = new Thread(this);
+		thread = new Thread(this, getClass().getName());
 		thread.start();
 	}
 
@@ -286,12 +290,12 @@ public class LDAPServiceTest implements Runnable
 
 	class LDAPBackgroundTest extends BackgroundTest
 	{
-		public LDAPBackgroundTest(Target target)
+		protected LDAPBackgroundTest(Target target)
 		{
 			super(target);
 		}
 
-		void test()
+		public void test()
 		{
 			String serverURL =
 				"ldap://" +
@@ -372,7 +376,7 @@ public class LDAPServiceTest implements Runnable
 				finished = true;
 				synchronized (this)
 				{
-					notifyAll();
+					notify();
 				}
 			}
 			catch (NamingException e)
