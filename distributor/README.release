@@ -2,6 +2,8 @@ Steps to create a new release of Distributor:
 
 - Bump version number in build.xml and distributor.init
 - Make sure ChangeLog is up to date
+- Run 'cvs tag Release-x_x'
+- Run './cvs2cl.pl -f ChangeLog.auto -T'
 - Run 'ant clean dist'
 - Upload to upload.sourceforge.net
 - Go to http://sf.net/projects/distributor/ -> Admin -> File Releases
