@@ -1,0 +1,7 @@
+0.4:  Cleaner handling of selection keys in DataMover, which
+      fixes a bug that led to a tight loop in some circumstances
+      and spurious warning messages.
+0.3:  Added log warning if service test times out
+0.2:  Made control server port a user-configurable item
+0.1:  Initial release
+
