@@ -34,6 +34,7 @@ import java.util.Iterator;
 import java.util.StringTokenizer;
 import java.util.logging.Logger;
 import java.util.logging.Level;
+import java.text.ParseException;
 
 public class Controller implements Runnable
 {
@@ -677,43 +678,11 @@ class ControllerConnection implements Runnable
 
 		Level newLevel;
 		String levelName = st.nextToken();
-		if (levelName.equals("off"))
+		try
 		{
-			newLevel = Level.OFF;
+			newLevel = Distributor.parseLogLevel(levelName);
 		}
-		else if (levelName.equals("severe"))
-		{
-			newLevel = Level.SEVERE;
-		}
-		else if (levelName.equals("warning"))
-		{
-			newLevel = Level.WARNING;
-		}
-		else if (levelName.equals("info"))
-		{
-			newLevel = Level.INFO;
-		}
-		else if (levelName.equals("config"))
-		{
-			newLevel = Level.CONFIG;
-		}
-		else if (levelName.equals("fine"))
-		{
-			newLevel = Level.FINE;
-		}
-		else if (levelName.equals("finer"))
-		{
-			newLevel = Level.FINER;
-		}
-		else if (levelName.equals("finest"))
-		{
-			newLevel = Level.FINEST;
-		}
-		else if (levelName.equals("all"))
-		{
-			newLevel = Level.ALL;
-		}
-		else
+		catch (ParseException e)
 		{
 			out.println("Unrecognized log level");
 			return;
