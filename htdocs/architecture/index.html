@@ -31,8 +31,8 @@ of Distributor.  You can list the threads in your copy with the
 </P>
 
 <UL>
-<LI>main/Distributor: accepts incoming connections and hands them off to
-    TargetSelector</LI>
+<LI>main (Distributor): accepts incoming connections and hands them off
+    to TargetSelector</LI>
 <LI>TargetSelector:  Marshalls pending connections through the
     DistributionAlgorithms</LI>
 <LI>DistributionAlgorithm (x # of algorithms):  Initiates connections to
@@ -42,10 +42,13 @@ of Distributor.  You can list the threads in your copy with the
 <LI>ServiceTest:  Test targets</LI>
 <LI>Target (x # of targets): Remove old connections</LI>
 <LI>DataMover (x # of targets):  Data transfer</LI>
+<LI>DelayedMover (x # of targets):  Delayed data transfer</LI>
 </UL>
 
 <P>
-And here is a diagram showing how these threads interact.
+And here is a diagram showing how these threads interact.  The arrow
+from top to bottom shows the path a connection takes as it is handed
+from one thread to another.
 (<A HREF="architecture.sxd">OpenOffice Draw source</A>)
 </P>
 
