@@ -12,7 +12,7 @@
 	<property name="build.dist" location="${build.dir}/dist"/>
 
 	<!-- Verson of the overall package, should be set automatically somehow -->
-	<property name="version" value="0.6.5"/>
+	<property name="version" value="0.7"/>
 
 	<!-- Location of imported files, i.e. files I didn't create -->
 	<property name="import.dir" location="import"/>

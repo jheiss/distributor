@@ -4,7 +4,7 @@
 cd /
 
 JAVA="/usr/java/j2sdk1.4.1_02/bin/java"
-VER="0.6.5"
+VER="0.7"
 DISTRIBUTOR="$JAVA -jar /usr/local/lib/distributor-$VER.jar"
 
 # On Linux and Solaris you probably want to uncomment this to increase
