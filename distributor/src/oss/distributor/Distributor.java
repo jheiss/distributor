@@ -59,7 +59,8 @@ public class Distributor
 	protected static void usage()
 	{
 		System.err.println(
-			"Usage:  java Distributor /path/to/distributor.conf");
+			"Usage:  java -jar /path/to/distributor-x.x.jar " +
+				"/path/to/distributor.conf");
 		System.exit(1);
 	}
 		
