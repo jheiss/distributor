@@ -34,7 +34,6 @@ import java.util.HashMap;
 import java.util.TreeMap;
 import java.util.List;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.Iterator;
 import java.util.logging.Logger;
 import java.util.logging.LogManager;
@@ -350,10 +349,7 @@ public class Distributor
 				Node configNode = configChildren.item(i);
 				if (configNode.getNodeName().equals("target_group"))
 				{
-					// targets is a LinkedList in order to make the
-					// re-ordering of the list by the round robin
-					// algorithm speedy
-					List targets = new LinkedList();
+					List targets = new ArrayList();
 
 					Element tgElement = (Element) configNode;
 
