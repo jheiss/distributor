@@ -1,0 +1,8 @@
+The Java Logging API provides three levels of fine-grained logging:
+fine, finer and finest.  This note describes how to use those levels
+within Distributor.
+
+fine:  Major events that occur once per connection
+finer:  Minor events that occur once per connection
+finest:  Events that occur more than once per connection
+
