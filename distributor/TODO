@@ -1,5 +1,4 @@
 - Implement logging configuration
-- Write HTTP and script testers
 - Add SNMP support:  A logger that sends SNMP traps and an SNMP
   interface to Controller
   http://www.opennms.org/files/releases/joeSNMP/
