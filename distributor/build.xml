@@ -60,6 +60,10 @@
 		name="dist"
 		depends="jar"
 		description="Builds a distribution tarball">
+
+		<!-- I'd welcome suggestions on how to reduce the repetition
+		     between the tar and zip tasks -->
+
 		<tar
 			destfile="${build.dist}/distributor-${version}.tar.gz"
 			compression="gzip">
@@ -88,6 +92,37 @@
 				<include name="GPL"/>
 			</tarfileset>
 		</tar>
+		<checksum file="${build.dist}/distributor-${version}.tar.gz"/>
+
+		<zip
+			destfile="${build.dist}/distributor-${version}.zip">
+			<!-- Include the source -->
+			<zipfileset
+				dir="${src.dir}"
+				excludes="**/old/**"
+				prefix="distributor-${version}/src"/>
+			<!-- And the compiled class files -->
+			<zipfileset
+				dir="${build.classes}"
+				prefix="distributor-${version}/build/classes"/>
+			<!-- And the JAR -->
+			<zipfileset
+				dir="${build.lib}"
+				prefix="distributor-${version}/build/lib"/>
+			<!-- And some other misc. files -->
+			<zipfileset dir="." prefix="distributor-${version}">
+				<include name="build.xml"/>
+				<include name="distributor.conf"/>
+				<include name="distributor.conf-ldap"/>
+				<include name="distributor.conf-notest"/>
+				<include name="README"/>
+				<include name="README.distributor.conf"/>
+				<include name="INSTALL"/>
+				<include name="GPL"/>
+			</zipfileset>
+		</zip>
+		<checksum file="${build.dist}/distributor-${version}.zip"/>
+
 	</target>
 
 </project>
