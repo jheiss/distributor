@@ -1,0 +1,46 @@
+<HTML>
+
+<HEAD>
+<TITLE>Distributor Architecture</TITLE>
+</HEAD>
+
+<BODY>
+
+<H1>Distributor Architecture</H1>
+
+<H2>Threads and I/O Model</H2>
+
+<P>
+Distributor does not spawn a new thread for each connection.  That type
+of architecture incurs a high context-switch rate as the kernel switches
+between threads.  Instead, distributor has a small and fairly constant
+number of threads to handle its various tasks.  The bulk data transfer
+is done using non-blocking I/O in the DataMover threads.  Having
+multiple threads allows distributor to take advantage of multi-CPU
+systems, but limiting the number of threads to a small number avoids the
+context-switch problems.
+</P>
+
+<P>
+Threads in distributor:
+</P>
+
+<UL>
+<LI>Balancer: accepts incoming connections</LI>
+<LI>TargetSelector:  Pick target for incoming connection (should have a
+  pool of these)</LI>
+<LI>Controller:  accepts incoming control connections</LI>
+<LI>ControllerConnection (x # of control connections)</LI>
+<LI>ServiceTest:  Test targets</LI>
+<LI>Target (x # of targets): Remove old connections</LI>
+<LI>DataMover (x # of targets):  Data transfer</LI>
+</UL>
+
+<P>
+$Id$
+</P>
+
+</BODY>
+
+</HTML>
+
