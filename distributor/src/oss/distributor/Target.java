@@ -146,15 +146,18 @@ public class Target implements Runnable
 
 	protected void terminateAll()
 	{
+		Iterator iter;
+		Connection conn;
+
 		synchronized (connections)
 		{
-			Iterator i = connections.iterator();
-			while (i.hasNext())
+			iter = connections.iterator();
+			while (iter.hasNext())
 			{
-				Connection conn = (Connection) i.next();
+				conn = (Connection) iter.next();
 				logger.fine("Terminating and removing connection " + conn);
 				conn.terminate();
-				i.remove();
+				iter.remove();
 			}
 		}
 	}
@@ -165,18 +168,21 @@ public class Target implements Runnable
 	 */
 	public void run()
 	{
+		Iterator iter;
+		Connection conn;
+
 		while (true)
 		{
 			synchronized (connections)
 			{
-				Iterator i = connections.iterator();
-				while (i.hasNext())
+				iter = connections.iterator();
+				while (iter.hasNext())
 				{
-					Connection conn = (Connection) i.next();
+					conn = (Connection) iter.next();
 					if (conn.isTerminated())
 					{
 						logger.finer("Removing terminated connection");
-						i.remove();
+						iter.remove();
 					}
 				}
 			}
@@ -225,6 +231,34 @@ public class Target implements Runnable
 		stats += dataMover.getMemoryStats(indent);
 
 		return stats;
+	}
+
+	protected String getConnectionList(String indent)
+	{
+		String connList;
+
+		synchronized (connections)
+		{
+			if (connections.size() > 0)
+			{
+				Iterator iter;
+				Connection conn;
+				connList = new String();
+
+				iter = connections.iterator();
+				while(iter.hasNext())
+				{
+					conn = (Connection) iter.next();
+					connList += indent + conn + "\n";
+				}
+			}
+			else
+			{
+				connList = indent + "No connections";
+			}
+		}
+
+		return connList;
 	}
 }
 
