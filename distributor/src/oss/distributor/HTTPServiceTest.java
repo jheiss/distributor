@@ -40,7 +40,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-public class HTTPServiceTest implements Runnable
+class HTTPServiceTest implements Runnable
 {
 	Distributor distributor;
 	Logger logger;
@@ -53,13 +53,17 @@ public class HTTPServiceTest implements Runnable
 	String path;
 	String userAgent;
 
-	public static final int REQUIREMENT_RESPONSE_CODE = 1;
-	public static final int REQUIREMENT_CONTENT_TYPE = 2;
-	public static final int REQUIREMENT_DOCUMENT_TEXT = 3;
+	protected static final int REQUIREMENT_RESPONSE_CODE = 1;
+	protected static final int REQUIREMENT_CONTENT_TYPE = 2;
+	protected static final int REQUIREMENT_DOCUMENT_TEXT = 3;
 	Map requirements;
 
 	Thread thread;
 
+	/*
+	 * Because the service tests are instantiated via Class.forName(),
+	 * they must have public constructors.
+	 */
 	public HTTPServiceTest(Distributor distributor, Element configElement)
 	{
 		this.distributor = distributor;
@@ -183,7 +187,7 @@ public class HTTPServiceTest implements Runnable
 		logger.fine("Path:  " + path);
 		logger.fine("Requirements:  " + requirements);
 
-		thread = new Thread(this);
+		thread = new Thread(this, getClass().getName());
 		thread.start();
 	}
 
@@ -267,12 +271,12 @@ public class HTTPServiceTest implements Runnable
 
 	class HTTPBackgroundTest extends BackgroundTest
 	{
-		public HTTPBackgroundTest(Target target)
+		protected HTTPBackgroundTest(Target target)
 		{
 			super(target);
 		}
 
-		void test()
+		public void test()
 		{
 			try
 			{
@@ -371,7 +375,7 @@ public class HTTPServiceTest implements Runnable
 				finished = true;
 				synchronized (this)
 				{
-					notifyAll();
+					notify();
 				}
 			}
 			catch (MalformedURLException e)
