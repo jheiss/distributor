@@ -19,6 +19,8 @@ Run
 
 If you've configured Distributor to listen on a privileged port (<1024)
 then you'll need to run it as root.  Otherwise it can as any user.
+distributor.init is a sample init script for starting Distributor at
+boot time.
 
 java -jar /usr/local/lib/distributor-x.x.jar /usr/local/etc/distributor.conf
 
