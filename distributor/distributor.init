@@ -1,0 +1,25 @@
+#!/bin/sh
+
+# Change to the root directory so we aren't holding any filesystem open
+cd /
+
+JAVA="/usr/java/j2sdk1.4.1_02/bin/java"
+VER="0.5"
+DISTRIBUTOR="$JAVA -jar /usr/local/lib/distributor-$VER.jar"
+
+case "$1" in
+	start)
+		nohup $DISTRIBUTOR /usr/local/etc/distributor.conf > /dev/null &
+		;;
+	stop)
+		pkill -f "$DISTRIBUTOR"
+		;;
+	restart)
+		$0 stop
+		sleep 5
+		$0 start
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+esac
+
