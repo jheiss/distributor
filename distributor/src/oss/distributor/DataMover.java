@@ -152,8 +152,9 @@ class DataMover implements Runnable
 			}
 			catch (IOException e)
 			{
-				// What's it mean to get an I/O exception from select?
-				// Is it bad enough that we should return or exit?
+				// The only exceptions thrown by select seem to be the
+				// occasional (fairly rare) "Interrupted system call"
+				// which, from what I can tell, is safe to ignore.
 				logger.warning(
 					"Error when selecting for ready channel: " +
 					e.getMessage());
