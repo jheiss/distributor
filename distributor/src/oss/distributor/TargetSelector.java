@@ -171,63 +171,62 @@ public class TargetSelector implements Runnable
 			// Handle clients which need to be distributed
 			//
 
-			// Roll over the needsDistributing queue so that we can
-			// process it without holding anyone else up
-			needsDistProcessQueue = needsDistributing;
-			needsDistributing = new LinkedList();
-			// Now that we've rolled over the queue, we don't need to
-			// synchronize, as no one else is going to touch it.
-			iter = needsDistProcessQueue.iterator();
-			while (iter.hasNext())
+			synchronized (needsDistributing)
 			{
-				client = (SocketChannel) iter.next();
-
-				//
-				// Figure out which algorithm to use for this client
-				//
-
-				// Get the last algorithm used
-				algo = (DistributionAlgorithm) currentAlgorithm.get(client);
-
-				// New clients won't be in the map and thus we'll
-				// get null.  Start them off with the first algorithm.
-				if (algo == null)
+				iter = needsDistributing.iterator();
+				while (iter.hasNext())
 				{
-					algo =
-						(DistributionAlgorithm) distributionAlgorithms.get(0);
-				}
-				// Otherwise advance to the next algorithm
-				else
-				{
-					i = distributionAlgorithms.indexOf(algo);
-					if (i < (distributionAlgorithms.size() - 1))
+					client = (SocketChannel) iter.next();
+					iter.remove();
+
+					//
+					// Figure out which algorithm to use for this client
+					//
+
+					// Get the last algorithm used
+					algo = (DistributionAlgorithm) currentAlgorithm.get(client);
+
+					// New clients won't be in the map and thus we'll
+					// get null.  Start them off with the first algorithm.
+					if (algo == null)
 					{
 						algo =
 							(DistributionAlgorithm)
-								distributionAlgorithms.get(i + 1);
+								distributionAlgorithms.get(0);
 					}
+					// Otherwise advance to the next algorithm
 					else
 					{
-						// No more algorithms available, disconnect
-						logger.warning(
-							"Unable to find a working target for client " +
-							client);
-						try { client.close(); } catch (IOException e) {}
+						i = distributionAlgorithms.indexOf(algo);
+						if (i < (distributionAlgorithms.size() - 1))
+						{
+							algo =
+								(DistributionAlgorithm)
+									distributionAlgorithms.get(i + 1);
+						}
+						else
+						{
+							// No more algorithms available, disconnect
+							logger.warning(
+								"Unable to find a working target for client " +
+								client);
+							try { client.close(); } catch (IOException e) {}
+						}
 					}
+
+					// Record the current algorithm in case it fails to
+					// find a working target and the client needs
+					// another trip through this section
+					currentAlgorithm.put(client, algo);
+
+					//
+					// Ask the algorithm to attempt to find a Target for
+					// this client
+					//
+					logger.finer("Asking " + algo +
+						" to try to find a target for " + client);
+					algo.tryToConnect(client);
 				}
-
-				// Record the current algorithm in case it fails to
-				// find a working target and the client needs
-				// another trip through this section
-				currentAlgorithm.put(client, algo);
-
-				//
-				// Ask the algorithm to attempt to find a Target for
-				// this client
-				//
-				logger.finer("Asking " + algo +
-					" to try to find a target for " + client);
-				algo.tryToConnect(client);
 			}
 
 			//
@@ -235,40 +234,54 @@ public class TargetSelector implements Runnable
 			// finished distributing
 			//
 
-			// Roll over the finishedDistributing queue so that we can
-			// process it without holding anyone else up
-			finishedDistProcessQueue = finishedDistributing;
-			finishedDistributing = new LinkedList();
-			// Now that we've rolled over the queue, we don't need to
-			// synchronize, as no one else is going to touch it.
-			iter = finishedDistProcessQueue.iterator();
-			while (iter.hasNext())
+			synchronized (finishedDistributing)
 			{
-				conn = (Connection) iter.next();
-
-				// Let each distribution algorithm know that a
-				// successful connection has occurred.  Some
-				// algorithms want to record that information.
-				logger.finer(
-					"Notifying distribution algorithms of successful " +
-					"connection " + conn);
-				algoIter = distributionAlgorithms.iterator();
-				while (algoIter.hasNext())
+				iter = finishedDistributing.iterator();
+				while (iter.hasNext())
 				{
-					algo = (DistributionAlgorithm) algoIter.next();
-					algo.connectionNotify(conn);
+					conn = (Connection) iter.next();
+					iter.remove();
+
+					// Let each distribution algorithm know that a
+					// successful connection has occurred.  Some
+					// algorithms want to record that information.
+					logger.finer(
+						"Notifying distribution algorithms of successful " +
+						"connection " + conn);
+					algoIter = distributionAlgorithms.iterator();
+					while (algoIter.hasNext())
+					{
+						algo = (DistributionAlgorithm) algoIter.next();
+						algo.connectionNotify(conn);
+					}
+
+					// Yank them from currentAlgorithm
+					algo =
+						(DistributionAlgorithm)
+							currentAlgorithm.remove(conn.getClient());
+
+					// Register them with the Target
+					logger.finer(
+						"Registering connection " + conn + "with target");
+					conn.getTarget().addConnection(conn);
 				}
-
-				// Yank them from currentAlgorithm
-				algo =
-					(DistributionAlgorithm)
-						currentAlgorithm.remove(conn.getClient());
-
-				// Register them with the Target
-				logger.finer("Registering connection " + conn + "with target");
-				conn.getTarget().addConnection(conn);
 			}
 		}
+	}
+
+	protected String getMemoryStats(String indent)
+	{
+		String stats;
+
+		stats = indent +
+			currentAlgorithm.size() + " entries in currentAlgorithm Map\n";
+		stats += indent +
+			needsDistributing.size() + " entries in needsDistributing List\n";
+		stats += indent +
+			finishedDistributing.size() +
+			" entries in finishedDistributing List";
+
+		return stats;
 	}
 }
 
