@@ -642,8 +642,7 @@ public class Distributor
 		}
 		catch (IOException e)
 		{
-			logger.severe("Error with server socket: " + e.getMessage());
-			System.exit(1);
+			logger.warning("Error with server socket: " + e.getMessage());
 		}
 	}
 
