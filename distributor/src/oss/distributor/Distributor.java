@@ -285,6 +285,9 @@ public class Distributor
 					Element mapElement = (Element) configNode;
 					String algoName = mapElement.getAttribute("name");
 					String algoClass = mapElement.getAttribute("class");
+					logger.finest(
+						"Loaded algo mapping:  " + algoName +
+						" -> " + algoClass);
 					algoClasses.put(algoName, algoClass);
 				}
 			}
@@ -306,6 +309,8 @@ public class Distributor
 							Element algoElement = (Element) algoNode;
 							String algoName =
 								algoElement.getAttribute("name");
+							logger.finer(
+								"Constructing " + algoClasses.get(algoName));
 							Object distAlgo =
 								constructObjectFromName(
 									(String) algoClasses.get(algoName),
@@ -462,6 +467,7 @@ public class Distributor
 				}
 
 				// Now construct the service test object
+				logger.finer("Constructing " + testClassName);
 				serviceTest = constructObjectFromName(
 					testClassName, testParameters);
 			}
