@@ -48,7 +48,9 @@ public abstract class DistributionAlgorithm
 	int connectionTimeout;
 	TargetSelector targetSelector;
 	Selector selector;
-	Map newConnections;
+	// newClients needs to be accessible to subclasses, even if they are
+	// in a different package, for use in proccessNewClients().
+	protected List newClients;
 	Map pendingConnections;
 	List failedConnections;
 
@@ -63,7 +65,7 @@ public abstract class DistributionAlgorithm
 		logger = distributor.getLogger();
 		//logger = Logger.getLogger(getClass().getName());
 
-		newConnections = new HashMap();
+		newClients = new LinkedList();
 		pendingConnections = new HashMap();
 		failedConnections = new LinkedList();
 
@@ -95,90 +97,77 @@ public abstract class DistributionAlgorithm
 	/*
 	 * TargetSelector uses this method to give us a client.
 	 */
-	public abstract void tryToConnect(SocketChannel client);
-
-	/*
-	 * Once an algorithm has picked a possible Target for a client, it
-	 * uses this method to initiate a connection to that target.
-	 */
-	public void initiateConnection(SocketChannel client, Target target)
+	void tryToConnect(SocketChannel client)
 	{
-		// Put the information into a queue that will be processed later
-		// by calling processNewConnections()
-		synchronized(newConnections)
+		// Add the client to a queue which will be processed later
+		// (in our thread instead of the caller's), by processNewClients().
+		synchronized (newClients)
 		{
-			newConnections.put(client, target);
+			newClients.add(client);
 		}
 
-		// Wakeup the select so that the new connection queue
-		// gets processed
+		// Wakeup the select so that the new client queue gets processed
 		selector.wakeup();
 	}
 
 	/*
-	 * Process new connections queued up by calls to initiateConnection()
+	 * Child classes must use this method to process the newClients queue.
+	 * They should call this method in their run() method.
 	 */
-	private void processNewConnections()
+	protected abstract void processNewClients();
+
+	/*
+	 * Once an algorithm has picked a possible Target for a client, it
+	 * uses this method to initiate a connection to that target.
+	 *
+	 * This method will generally be called from within
+	 * processNewClients().
+	 */
+	public void initiateConnection(SocketChannel client, Target target)
 	{
-		Iterator iter;
-		Entry newEntry;
-		SocketChannel client;
-		Target target;
 		SocketChannel connToServer;
 		SelectionKey key;
 
-		synchronized(newConnections)
+		try
 		{
-			iter = newConnections.entrySet().iterator();
-			while(iter.hasNext())
+			connToServer = SocketChannel.open();
+			connToServer.configureBlocking(false);
+
+			// Initiate connection
+			connToServer.connect(
+				new InetSocketAddress(
+					target.getInetAddress(),
+					target.getPort()));
+
+			// Use the client as the attachment to the key since
+			// we'll need it later to lookup this connection's
+			// state info in the pendingConnections map
+			key = connToServer.register(
+				selector, SelectionKey.OP_CONNECT, client);
+
+			synchronized (pendingConnections)
 			{
-				newEntry = (Entry) iter.next();
-				iter.remove();
-				client = (SocketChannel) newEntry.getKey();
-				target = (Target) newEntry.getValue();
-
-				try
-				{
-					connToServer = SocketChannel.open();
-					connToServer.configureBlocking(false);
-
-					// Initiate connection
-					connToServer.connect(
-						new InetSocketAddress(
-							target.getInetAddress(),
-							target.getPort()));
-
-					// Use the client as the attachment to the key since
-					// we'll need it later to lookup this connection's
-					// state info in the pendingConnections map
-					key = connToServer.register(
-						selector, SelectionKey.OP_CONNECT, client);
-
-					synchronized (pendingConnections)
-					{
-						// The target is needed later to create the
-						//   Connection object if this connection succeeds
-						// The time that the connection was initiated is
-						//   used later in determining if this connection
-						//   has timed out.
-						// The selection key is needed so that it can be
-						//   canceled if the connection does time out.
-						pendingConnections.put(
-							client,
-							new PendingConnectionState(
-								target, System.currentTimeMillis(), key));
-					}
-				}
-				catch (IOException e)
-				{
-					logger.warning(
-						"Error initiating connection to target: " +
-						e.getMessage());
-					synchronized(failedConnections)
-					{
-						failedConnections.add(client);
-					}
-				}
+				// The target is needed later to create the
+				//   Connection object if this connection succeeds
+				// The time that the connection was initiated is
+				//   used later in determining if this connection
+				//   has timed out.
+				// The selection key is needed so that it can be
+				//   canceled if the connection does time out.
+				pendingConnections.put(
+					client,
+					new PendingConnectionState(
+						target, System.currentTimeMillis(), key));
+			}
+		}
+		catch (IOException e)
+		{
+			logger.warning(
+				"Error initiating connection to target: " +
+				e.getMessage());
+			synchronized(failedConnections)
+			{
+				failedConnections.add(client);
 			}
 		}
 	}
@@ -186,6 +175,8 @@ public abstract class DistributionAlgorithm
 	/*
 	 * Deal with any connections which have completed, and return a list
 	 * of those that have.
+	 *
+	 * Child classes should call this method from within their run() method.
 	 */
 	public List checkForCompletedConnections()
 	{
@@ -196,8 +187,6 @@ public abstract class DistributionAlgorithm
 		SocketChannel server;
 		PendingConnectionState connState;
 		List completed = new LinkedList();
-
-		processNewConnections();
 
 		// Select for a limited amount of time so that users of this
 		// method also get a chance to detect failed and timed out
@@ -282,6 +271,8 @@ public abstract class DistributionAlgorithm
 	/*
 	 * Return a list of connections which have timed out or otherwise
 	 * failed.
+	 *
+	 * Child classes should call this method from within their run() method.
 	 */
 	public List checkForFailedConnections()
 	{
@@ -351,13 +342,6 @@ public abstract class DistributionAlgorithm
 		return buffer;
 	}
 
-	public String toString()
-	{
-		return(
-			getClass().getName() +
-			" with " + pendingConnections.size() + " pending connections");
-	}
-
 	class PendingConnectionState
 	{
 		Target target;
@@ -377,6 +361,22 @@ public abstract class DistributionAlgorithm
 		Target getTarget() { return target; }
 		long getStartTime() { return startTime; }
 		SelectionKey getServerKey() { return serverConnectionKey; }
+	}
+
+	public String getMemoryStats(String indent)
+	{
+		String stats;
+
+		stats = indent +
+			newClients.size() + " entries in newClients List\n";
+		stats += indent +
+			pendingConnections.size() + " entries in pendingConnections Map\n";
+		stats += indent +
+			failedConnections.size() + " entries in failedConnections List\n";
+		stats += indent +
+			selector.keys().size() + " entries in selector key Set";
+
+		return stats;
 	}
 }
 
