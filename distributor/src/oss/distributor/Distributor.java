@@ -500,13 +500,13 @@ public class Distributor
 
 		targetSelector = new TargetSelector(this);
 
-		// Start all of the threads which require delayed initialization
-		targetSelector.startThread();
+		// Finish the initialization of those classes that require it
+		targetSelector.finishInitialization();
 		Iterator iter = distributionAlgorithms.iterator();
 		while(iter.hasNext())
 		{
 			DistributionAlgorithm algo = (DistributionAlgorithm) iter.next();
-			algo.startThread();
+			algo.finishInitialization();
 		}
 	}
 

@@ -92,12 +92,6 @@ class HashDistributionAlgorithm
 		thread = new Thread(this, getClass().getName());
 	}
 
-	/*
-	 * This allows Distributor to delay some of our initialization until
-	 * it is ready.  There are some things we need that Distributor may
-	 * not have ready at the point at which it constructs us, so we wait
-	 * and retrieve them at the start of run().
-	 */
 	public void startThread()
 	{
 		thread.start();
@@ -150,10 +144,6 @@ class HashDistributionAlgorithm
 		SocketChannel client;
 		InetAddress addr;
 		long lastConnect;
-
-		// Finish any initialization that was delayed until Distributor
-		// was ready.
-		finishInitialization();
 
 		while (true)
 		{
