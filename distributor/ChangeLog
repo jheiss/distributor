@@ -1,3 +1,34 @@
+0.7:
+    Significant changes to the interface between
+      DistributionAlgorithm and its subclasses.  Rather than the
+      subclasses having a thread/run() method which calls
+      methods in DistributionAlgorithm, DistributionAlgorithm
+      now has the thread/run() method and calls methods in the
+      subclasses to perform various tasks.  And actually,
+      DistributionAlgorithm now has two threads:
+      DistributionAlgorithm itself and
+      TimedOutConnectionDetector (an inner class of
+      DistributionAlgorithm).  This means that the every second
+      wakeup that the subclass thread had to do in order to pick
+      up timed out connections is gone.  This all makes it much
+      cleaner and easier to describe what a subclass needs to do.
+      Essentially it is now mandated by abstract methods in
+      DistributionAlgorithm, rather than just being described in
+      various comments as it was before.
+
+    In all places where Distributor uses select(), I've added a
+      counter of failed calls to select() and a slight pause
+      after a number of them.  If select() starts failing, this
+      keeps us from going into a tight loop.  A user reported
+      that behavior after his network interface went down.
+
+    Catch CancelledKeyException when operating on the
+      interest bits of a selection key in DataMover.  There's a
+      slight possibility that a key will have been canceled (if
+      the remote end closed the connection, for example) and we
+      won't have caught that before attempting to perform the
+      operation.  This fixes the problem mentioned in the
+      release announcement for version 0.6.5.
 0.6.5:
     Added a half_close configuration option to allow the TCP
       half close support to be turned off.  The default
