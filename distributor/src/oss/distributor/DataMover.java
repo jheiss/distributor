@@ -33,23 +33,30 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Selector;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.Iterator;
 import java.util.logging.Logger;
 
-public class DataMover implements Runnable
+class DataMover implements Runnable
 {
 	Selector selector;
 	Logger logger;
+	List distributionAlgorithms;
+	Map clients;
+	Map servers;
 	Thread thread;
 
-	public DataMover(Distributor distributor)
+	protected DataMover(Distributor distributor)
 	{
 		logger = distributor.getLogger();
+		distributionAlgorithms = distributor.getDistributionAlgorithms();
 
 		try
 		{
-			logger.finer("Opening selector");
+			//logger.finer("Opening selector");
 			selector = Selector.open();
 		}
 		catch (IOException e)
@@ -58,12 +65,15 @@ public class DataMover implements Runnable
 			System.exit(1);
 		}
 
+		clients = new HashMap();
+		servers = new HashMap();
+
 		// Create a thread for ourselves and start it
-		thread = new Thread(this);
+		thread = new Thread(this, getClass().getName());
 		thread.start();
 	}
 
-	public void addConnection(Connection conn)
+	protected void addConnection(Connection conn)
 	{
 		SocketChannel client = conn.getClient();
 		SocketChannel server = conn.getServer();
@@ -74,10 +84,9 @@ public class DataMover implements Runnable
 			client.configureBlocking(false);
 			server.configureBlocking(false);
 
-			// Register the two channels with the other half of the
-			// pair as the attachment to the selection key.  This
-			// allows to easily figure out who to transfer the data
-			// to in the selection loop below.
+			clients.put(client, server);
+			servers.put(server, client);
+
 			synchronized (this)
 			{
 				// Wakeup the select so that it doesn't block us from
@@ -87,12 +96,12 @@ public class DataMover implements Runnable
 				SelectionKey key;
 
 				logger.finest("Registering channels with selector");
-				key = client.register(selector, SelectionKey.OP_READ, server);
+				key = client.register(selector, SelectionKey.OP_READ);
 				conn.setClientSelectionKey(key);
-				logger.finest("Client registered");
-				key = server.register(selector, SelectionKey.OP_READ, client);
+				//logger.finest("Client registered");
+				key = server.register(selector, SelectionKey.OP_READ);
 				conn.setServerSelectionKey(key);
-				logger.finest("Server registered");
+				//logger.finest("Server registered");
 			}
 		}
 		catch (IOException e)
@@ -102,13 +111,13 @@ public class DataMover implements Runnable
 				e.getMessage());
 			try
 			{
-				logger.finest("Closing channels");
+				logger.fine("Closing channels");
 				client.close();
 				server.close();
 			}
 			catch (IOException ioe)
 			{
-				logger.warning("Error closing channels: " + e.getMessage());
+				logger.warning("Error closing channels: " + ioe.getMessage());
 			}
 		}
 	}
@@ -120,18 +129,23 @@ public class DataMover implements Runnable
 		SelectionKey key;
 		SocketChannel src;
 		SocketChannel dst;
+		boolean clientToServer;
 		Socket srcSocket;
 		Socket dstSocket;
+		Iterator algoIter;
+		DistributionAlgorithm algo;
 		final int bufferSize = 128 * 1024;
-		ByteBuffer buffer = ByteBuffer.allocateDirect(bufferSize);
+		ByteBuffer buffer;
 		int r;
+
+		buffer = ByteBuffer.allocateDirect(bufferSize);
 
 		while(true)
 		{
 			r = 0;
 			try
 			{
-				logger.finest("Calling select");
+				//logger.finest("Calling select");
 				r = selector.select();
 			}
 			catch (IOException e)
@@ -144,17 +158,19 @@ public class DataMover implements Runnable
 			}
 
 			// If someone is in the process of adding a new channel to
-			// our selector, wait for them to finish
+			// our selector (via the addConnection() method), wait for
+			// them to finish
 			synchronized (this)
 			{
 				// Do we need anything in here to keep the compiler from
 				// optimizing this block away?
-				logger.finest("run has monitor");
+				//logger.finest("run has monitor");
 			}
 
 			if (r > 0)
 			{
-				logger.finest("select reports " + r + " channels ready");
+				logger.finest(
+					"select reports " + r + " channels ready to read");
 
 				// Work through the list of channels that have
 				// data to read
@@ -165,8 +181,20 @@ public class DataMover implements Runnable
 					key = (SelectionKey) keyIter.next();
 					keyIter.remove();
 
+					// Figure out which direction this data is going and
+					// get the SocketChannel that is the other half of
+					// the connection.
 					src = (SocketChannel) key.channel();
-					dst = (SocketChannel) key.attachment();
+					if (clients.containsKey(src))
+					{
+						clientToServer = true;
+						dst = (SocketChannel) clients.get(src);
+					}
+					else
+					{
+						clientToServer = false;
+						dst = (SocketChannel) servers.get(src);
+					}
 
 					try
 					{
@@ -177,6 +205,25 @@ public class DataMover implements Runnable
 						if (r > 0)  // Data was read
 						{
 							buffer.flip();
+
+							// Give each of the distribution algorithms a
+							// chance to inspect/modify the data stream
+							algoIter = distributionAlgorithms.iterator();
+							while (algoIter.hasNext())
+							{
+								algo = (DistributionAlgorithm) algoIter.next();
+								if (clientToServer)
+								{
+									algo.reviewClientToServerData(buffer);
+								}
+								else
+								{
+									algo.reviewServerToClientData(buffer);
+								}
+							}
+
+							// Send the data on to its destination
+							// *** This is potentially trouble
 							while (buffer.remaining() > 0)
 							{
 								dst.write(buffer);
@@ -197,7 +244,7 @@ public class DataMover implements Runnable
 							// the socket
 							if (srcSocket.isOutputShutdown())
 							{
-								logger.finest("Closing source socket");
+								logger.finer("Closing source socket");
 								srcSocket.close();
 							}
 							// Otherwise just close down the input
@@ -213,7 +260,7 @@ public class DataMover implements Runnable
 							// but using the reverse streams.
 							if (dstSocket.isInputShutdown())
 							{
-								logger.finest("Closing destination socket");
+								logger.finer("Closing destination socket");
 								dstSocket.close();
 							}
 							else
@@ -235,14 +282,14 @@ public class DataMover implements Runnable
 
 						try
 						{
-							logger.finest("Closing channels");
+							logger.fine("Closing channels");
 							src.close();
 							dst.close();
 						}
 						catch (IOException ioe)
 						{
 							logger.warning(
-								"Error closing channels: " + e.getMessage());
+								"Error closing channels: " + ioe.getMessage());
 						}
 					}
 				}
