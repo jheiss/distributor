@@ -330,10 +330,16 @@ public class LDAPServiceTest implements Runnable
 
 						if (result && ! target.isEnabled())
 						{
+							// I was tempted to log this at info but
+							// if someone has their log level set to
+							// warning then they'd only see the disable
+							// messages and not the enable messages.
+							logger.warning("Enabling: " + target);
 							target.enable();
 						}
 						else if (! result && target.isEnabled())
 						{
+							logger.warning("Disabling: " + target);
 							target.disable();
 						}
 					}
@@ -406,6 +412,8 @@ public class LDAPServiceTest implements Runnable
 					String reqAttrKey = (String) reqAttr.getKey();
 					String reqAttrValue = (String) reqAttr.getValue();
 
+					logger.finer("Checking for attribute: " + reqAttr);
+
 					Attribute returnedAttr = returnedAttributes.get(reqAttrKey);
 					if (returnedAttr == null)
 					{
@@ -428,6 +436,11 @@ public class LDAPServiceTest implements Runnable
 	
 				logger.finest("Closing context");
 				ctx.close();
+
+				if (success)
+				{
+					logger.fine("Server returned all required attributes");
+				}
 
 				finished = true;
 				synchronized (this)
