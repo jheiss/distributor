@@ -34,6 +34,7 @@ import java.nio.channels.Selector;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.List;
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Set;
@@ -47,6 +48,7 @@ class DataMover implements Runnable
 	List distributionAlgorithms;
 	Map clients;
 	Map servers;
+	List newConnections;
 	long clientToServerByteCount;
 	long serverToClientByteCount;
 	Thread thread;
@@ -69,6 +71,7 @@ class DataMover implements Runnable
 
 		clients = new HashMap();
 		servers = new HashMap();
+		newConnections = new LinkedList();
 
 		clientToServerByteCount = 0;
 		serverToClientByteCount = 0;
@@ -78,58 +81,85 @@ class DataMover implements Runnable
 		thread.start();
 	}
 
+	/*
+	 * Completed connections established by a distribution algorithm are
+	 * handed to the cooresponding Target, which it turn registers them
+	 * with us via this method.
+	 */
 	protected void addConnection(Connection conn)
 	{
-		SocketChannel client = conn.getClient();
-		SocketChannel server = conn.getServer();
-
-		try
+		// Add connection to a queue that will be processed later by
+		// calling processNewConnections()
+		synchronized (newConnections)
 		{
-			logger.finest("Setting channels to non-blocking mode");
-			client.configureBlocking(false);
-			server.configureBlocking(false);
-
-			clients.put(client, server);
-			servers.put(server, client);
-
-			synchronized (this)
-			{
-				// Wakeup the select so that it doesn't block us from
-				// registering the channels
-				selector.wakeup();
-
-				SelectionKey key;
-
-				logger.finest("Registering channels with selector");
-				key = client.register(selector, SelectionKey.OP_READ);
-				conn.setClientSelectionKey(key);
-				//logger.finest("Client registered");
-				key = server.register(selector, SelectionKey.OP_READ);
-				conn.setServerSelectionKey(key);
-				//logger.finest("Server registered");
-			}
+			newConnections.add(conn);
 		}
-		catch (IOException e)
+
+		// Wakeup the select so that the new connection queue
+		// gets processed
+		selector.wakeup();
+	}
+
+	/*
+	 * Process new connections queued up by calls to addConnection()
+	 */
+	private void processNewConnections()
+	{
+		Iterator iter;
+		Connection conn;
+		SocketChannel client;
+		SocketChannel server;
+		SelectionKey key;
+
+		synchronized (newConnections)
 		{
-			logger.warning(
-				"Error setting channels to non-blocking mode: " +
-				e.getMessage());
-			try
+			iter = newConnections.iterator();
+			while(iter.hasNext())
 			{
-				logger.fine("Closing channels");
-				client.close();
-				server.close();
-			}
-			catch (IOException ioe)
-			{
-				logger.warning("Error closing channels: " + ioe.getMessage());
+				conn = (Connection) iter.next();
+				iter.remove();
+
+				client = conn.getClient();
+				server = conn.getServer();
+
+				try
+				{
+					logger.finest("Setting channels to non-blocking mode");
+					client.configureBlocking(false);
+					server.configureBlocking(false);
+
+					clients.put(client, server);
+					servers.put(server, client);
+
+					logger.finest("Registering channels with selector");
+					key = client.register(selector, SelectionKey.OP_READ);
+					conn.setClientSelectionKey(key);
+					key = server.register(selector, SelectionKey.OP_READ);
+					conn.setServerSelectionKey(key);
+				}
+				catch (IOException e)
+				{
+					logger.warning(
+						"Error setting channels to non-blocking mode: " +
+						e.getMessage());
+					try
+					{
+						logger.fine("Closing channels");
+						client.close();
+						server.close();
+					}
+					catch (IOException ioe)
+					{
+						logger.warning("Error closing channels: " +
+							ioe.getMessage());
+					}
+				}
 			}
 		}
 	}
 
 	public void run()
 	{
-		Set readyKeys;
 		Iterator keyIter;
 		SelectionKey key;
 		SocketChannel src;
@@ -140,15 +170,23 @@ class DataMover implements Runnable
 		boolean readMore;
 		Iterator algoIter;
 		DistributionAlgorithm algo;
-		final int bufferSize = 128 * 1024;
 		ByteBuffer buffer;
 		ByteBuffer reviewedBuffer;
 		int r;
 
+		final int bufferSize = 128 * 1024;
 		buffer = ByteBuffer.allocateDirect(bufferSize);
 
 		WHILETRUE:  while(true)
 		{
+			//
+			// Register any new connections with the selector
+			//
+			processNewConnections();
+
+			//
+			// Now select for any channels that have data to be moved
+			//
 			r = 0;
 			try
 			{
@@ -166,28 +204,11 @@ class DataMover implements Runnable
 				continue WHILETRUE;
 			}
 
-			// If someone is in the process of adding a new channel to
-			// our selector (via the addConnection() method), wait for
-			// them to finish
-			synchronized (this)
-			{
-				// Do we need anything in here to keep the compiler from
-				// optimizing this block away?
-				//logger.finest("run has monitor");
-			}
-
-			if (r == 0)
-			{
-				// select was interrupted, go back to waiting
-				continue WHILETRUE;
-			}
-
 			logger.finest(
 				"select reports " + r + " channels ready to read");
 
 			// Work through the list of channels that have data to read
-			readyKeys = selector.selectedKeys();
-			keyIter = readyKeys.iterator();
+			keyIter = selector.selectedKeys().iterator();
 			KEYITER:  while (keyIter.hasNext())
 			{
 				key = (SelectionKey) keyIter.next();
