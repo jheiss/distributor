@@ -582,6 +582,11 @@ public class Distributor
 		return targetSelector;
 	}
 
+	protected Controller getController()
+	{
+		return controller;
+	}
+
 	public int getConnectionTimeout()
 	{
 		return connectionTimeout;
