@@ -132,15 +132,17 @@ class DataMover implements Runnable
 		boolean clientToServer;
 		Socket srcSocket;
 		Socket dstSocket;
+		boolean readMore;
 		Iterator algoIter;
 		DistributionAlgorithm algo;
 		final int bufferSize = 128 * 1024;
 		ByteBuffer buffer;
+		ByteBuffer reviewedBuffer;
 		int r;
 
 		buffer = ByteBuffer.allocateDirect(bufferSize);
 
-		while(true)
+		WHILETRUE:  while(true)
 		{
 			r = 0;
 			try
@@ -155,6 +157,7 @@ class DataMover implements Runnable
 				logger.warning(
 					"Error when selecting for ready channel: " +
 					e.getMessage());
+				continue WHILETRUE;
 			}
 
 			// If someone is in the process of adding a new channel to
@@ -167,36 +170,43 @@ class DataMover implements Runnable
 				//logger.finest("run has monitor");
 			}
 
-			if (r > 0)
+			if (r == 0)
 			{
-				logger.finest(
-					"select reports " + r + " channels ready to read");
+				// select was interrupted, go back to waiting
+				continue WHILETRUE;
+			}
 
-				// Work through the list of channels that have
-				// data to read
-				readyKeys = selector.selectedKeys();
-				keyIter = readyKeys.iterator();
-				while (keyIter.hasNext())
+			logger.finest(
+				"select reports " + r + " channels ready to read");
+
+			// Work through the list of channels that have data to read
+			readyKeys = selector.selectedKeys();
+			keyIter = readyKeys.iterator();
+			while (keyIter.hasNext())
+			{
+				key = (SelectionKey) keyIter.next();
+				keyIter.remove();
+
+				// Figure out which direction this data is going and
+				// get the SocketChannel that is the other half of
+				// the connection.
+				src = (SocketChannel) key.channel();
+				if (clients.containsKey(src))
 				{
-					key = (SelectionKey) keyIter.next();
-					keyIter.remove();
+					clientToServer = true;
+					dst = (SocketChannel) clients.get(src);
+				}
+				else
+				{
+					clientToServer = false;
+					dst = (SocketChannel) servers.get(src);
+				}
 
-					// Figure out which direction this data is going and
-					// get the SocketChannel that is the other half of
-					// the connection.
-					src = (SocketChannel) key.channel();
-					if (clients.containsKey(src))
-					{
-						clientToServer = true;
-						dst = (SocketChannel) clients.get(src);
-					}
-					else
-					{
-						clientToServer = false;
-						dst = (SocketChannel) servers.get(src);
-					}
-
-					try
+				try
+				{
+					// Loop as long as the source has data to read
+					readMore = false;  // Assume there won't be more data
+					do  // while (readMore)
 					{
 						// Try to read data
 						buffer.clear();
@@ -204,29 +214,43 @@ class DataMover implements Runnable
 						logger.finest("Read " + r + " bytes from " + src);
 						if (r > 0)  // Data was read
 						{
+							// If the buffer is full, the source will
+							// likely to have more data for us to read
+							if (! buffer.hasRemaining())
+							{
+								readMore = true;
+							}
+
 							buffer.flip();
 
 							// Give each of the distribution algorithms a
 							// chance to inspect/modify the data stream
 							algoIter = distributionAlgorithms.iterator();
+							reviewedBuffer = buffer;
 							while (algoIter.hasNext())
 							{
-								algo = (DistributionAlgorithm) algoIter.next();
+								algo =
+									(DistributionAlgorithm) algoIter.next();
 								if (clientToServer)
 								{
-									algo.reviewClientToServerData(buffer);
+									reviewedBuffer =
+										algo.reviewClientToServerData(
+											src, dst, reviewedBuffer);
 								}
 								else
 								{
-									algo.reviewServerToClientData(buffer);
+									reviewedBuffer =
+										algo.reviewServerToClientData(
+											src, dst, reviewedBuffer);
 								}
 							}
 
 							// Send the data on to its destination
-							// *** This is potentially trouble
-							while (buffer.remaining() > 0)
+							// *** This is potentially trouble (what if
+							// the destination isn't ready to accept data?)
+							while (reviewedBuffer.remaining() > 0)
 							{
-								dst.write(buffer);
+								dst.write(reviewedBuffer);
 							}
 						}
 						else if (r == -1)  // EOF
@@ -246,6 +270,14 @@ class DataMover implements Runnable
 							{
 								logger.finer("Closing source socket");
 								srcSocket.close();
+								if (clientToServer)
+								{
+									clients.remove(src);
+								}
+								else
+								{
+									servers.remove(src);
+								}
 							}
 							// Otherwise just close down the input
 							// stream.  This allows any return traffic
@@ -262,6 +294,14 @@ class DataMover implements Runnable
 							{
 								logger.finer("Closing destination socket");
 								dstSocket.close();
+								if (clientToServer)
+								{
+									servers.remove(dst);
+								}
+								else
+								{
+									clients.remove(dst);
+								}
 							}
 							else
 							{
@@ -269,28 +309,40 @@ class DataMover implements Runnable
 								dstSocket.shutdownOutput();
 							}
 						}
+					} while (readMore);
+				}
+				catch (IOException e)
+				{
+					logger.warning(
+						"Error moving data between channels: " +
+						e.getMessage());
+
+					// Cancel this key for similar reasons as given
+					// in the EOF case above.
+					key.cancel();
+
+					// Drop the entries from the direction maps
+					if (clientToServer)
+					{
+						clients.remove(src);
+						servers.remove(dst);
 					}
-					catch (IOException e)
+					else
+					{
+						clients.remove(dst);
+						servers.remove(src);
+					}
+
+					try
+					{
+						logger.fine("Closing channels");
+						src.close();
+						dst.close();
+					}
+					catch (IOException ioe)
 					{
 						logger.warning(
-							"Error moving data between channels: " +
-							e.getMessage());
-
-						// Cancel this key for similar reasons as given
-						// in the EOF case above.
-						key.cancel();
-
-						try
-						{
-							logger.fine("Closing channels");
-							src.close();
-							dst.close();
-						}
-						catch (IOException ioe)
-						{
-							logger.warning(
-								"Error closing channels: " + ioe.getMessage());
-						}
+							"Error closing channels: " + ioe.getMessage());
 					}
 				}
 			}
