@@ -73,13 +73,13 @@ public class Target implements Runnable
 
 		logger = distributor.getLogger();
 
-		dataMover = new DataMover(distributor);
+		dataMover = new DataMover(distributor, this);
 
 		failureCount = 0;
 		totalConnectionCount = 0;
 		enabled = true;
 
-		thread = new Thread(this, getClass().getName());
+		thread = new Thread(this, toString());
 		thread.start();
 	}
 
@@ -188,35 +188,43 @@ public class Target implements Runnable
 		}
 	}
 
-	public int numberOfConnections()
-	{
-		synchronized (connections)
-		{
-			return connections.size();
-		}
-	}
-
 	public String toString()
 	{
-		String string = "Target: " + addr + ":" + port + "\n";
-			
+		return getClass().getName() + " for " + addr + ":" + port;
+	}
+
+	protected String getStats(String indent)
+	{
+		String stats;
+
 		if (enabled)
 		{
-			string += "    " + numberOfConnections() +
-				" current connections\n";
+			stats = indent + connections.size() + " current connections\n";
 		}
 		else
 		{
-			string += "    DISABLED\n";
+			stats = indent + "DISABLED\n";
 		}
 
-		string += "    " + totalConnectionCount + " total connections\n";
-		string += "    " + dataMover.getClientToServerByteCount() +
+		stats += indent + totalConnectionCount + " total connections\n";
+		stats += indent + dataMover.getClientToServerByteCount() +
 			" client to server bytes\n";
-		string += "    " + dataMover.getServerToClientByteCount() +
+		stats += indent + dataMover.getServerToClientByteCount() +
 			" server to client bytes";
 
-		return string;
+		return stats;
+	}
+
+	protected String getMemoryStats(String indent)
+	{
+		String stats;
+
+		stats = indent +
+			connections.size() + " entries in connections List\n";
+		stats += indent + "DataMover:\n";
+		stats += dataMover.getMemoryStats(indent);
+
+		return stats;
 	}
 }
 
